@@ -1,0 +1,13 @@
+{
+    "elasticsearch": {
+        "ES_HOST": "localhost:9200",
+        "ES_INDEX": = "nodenorm",
+        "ES_DOC_TYPE": = "node"
+    },
+    "telemetry": {
+        "OPENTELEMETRY_ENABLED": false,
+        "OPENTELEMETRY_SERVICE_NAME":"NodeNorm",
+        "OPENTELEMETRY_JAEGER_HOST": "http://localhost",
+        "OPENTELEMETRY_JAEGER_PORT": 6831
+    }
+}
