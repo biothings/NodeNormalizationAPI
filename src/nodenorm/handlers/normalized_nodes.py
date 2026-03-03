@@ -457,9 +457,9 @@ async def _lookup_equivalent_identifiers(
 
     curie_terms_query = {"bool": {"filter": [{"terms": {"identifiers.i": curies}}]}}
     source_fields = ["identifiers", "type", "ic", "preferred_name", "taxa"]
-    index = biothings_metadata.elasticsearch.metadata.indices["node"]
+    search_indices = biothings_metadata.elasticsearch.indices
     term_search_result = await biothings_metadata.elasticsearch.async_client.search(
-        query=curie_terms_query, index=index, size=len(curies), source_includes=source_fields
+        query=curie_terms_query, index=search_indices, size=len(curies), source_includes=source_fields
     )
 
     # Post processing to ensure we can identify invalid curies provided by the query

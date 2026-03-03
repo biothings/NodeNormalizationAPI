@@ -6,10 +6,11 @@ import uuid
 from typing import Optional
 
 from biothings.web.handlers import BaseHandler
-from biothings.web.services.namespace import BiothingsNamespace
+
 from tornado.web import HTTPError
 
 from nodenorm.handlers.normalized_nodes import get_normalized_nodes
+from nodenorm.namespace import NodeNormalizationAPINamespace
 
 
 @dataclasses.dataclass()
@@ -72,7 +73,9 @@ class SetIdentifierHandler(BaseHandler):
         self.finish(set_identifiers)
 
 
-async def generate_setid(biothings_metadata: BiothingsNamespace, curies: list[str], conflations: list[str]) -> dict:
+async def generate_setid(
+    biothings_metadata: NodeNormalizationAPINamespace, curies: list[str], conflations: list[str]
+) -> dict:
     """
     Generate a SetID for a set of curies.
 

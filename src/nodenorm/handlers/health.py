@@ -20,13 +20,10 @@ class NodeNormHealthHandler(BaseHandler):
         search_indices = self.biothings.elasticsearch.indices
 
         biothings_metadata = async_client.indices.get(search_indices)
-        breakpoint()
         compendia_url = self.biothings.metadata.biothing_metadata["node"]["src"]["nodenorm"]["url"]
         parsed_compendia_url = urlparse(compendia_url)
         babel_version = parsed_compendia_url.path.split("/")[-2]
         babel_markdown = f"https://github.com/ncatstranslator/Babel/blob/master/releases/{babel_version}.md"
-        babel_version = "TBD"
-        babel_markdown = "TBD"
         try:
             attributes = [
                 "name",
