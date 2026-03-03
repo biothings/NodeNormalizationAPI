@@ -1,11 +1,13 @@
 from urllib.parse import urlparse
 
-from biothings.web.handlers import BaseAPIHandler
+from elasticsearch import AsyncElasticsearch
 
-from nodenorm.handlers.biolink import BIOLINK_MODEL_VERSION
+from biothings.web.handlers import BaseHandler
+
+from nodenorm.biolink import BIOLINK_MODEL_VERSION
 
 
-class NodeNormHealthHandler(BaseAPIHandler):
+class NodeNormHealthHandler(BaseHandler):
     """
     Important Endpoints
     * /_cat/nodes
@@ -14,11 +16,17 @@ class NodeNormHealthHandler(BaseAPIHandler):
     name = "health"
 
     async def get(self):
+        async_client: AsyncElasticsearch = self.biothings.elasticsearch.async_client
+        search_indices = self.biothings.elasticsearch.indices
 
+        biothings_metadata = async_client.indices.get(search_indices)
+        breakpoint()
         compendia_url = self.biothings.metadata.biothing_metadata["node"]["src"]["nodenorm"]["url"]
         parsed_compendia_url = urlparse(compendia_url)
         babel_version = parsed_compendia_url.path.split("/")[-2]
         babel_markdown = f"https://github.com/ncatstranslator/Babel/blob/master/releases/{babel_version}.md"
+        babel_version = "TBD"
+        babel_markdown = "TBD"
         try:
             attributes = [
                 "name",
@@ -35,7 +43,7 @@ class NodeNormHealthHandler(BaseAPIHandler):
                 "uptime,version",
             ]
             h_string = ",".join(attributes)
-            cat_nodes_response = await self.biothings.elasticsearch.async_client.cat.nodes(format="json", h=h_string)
+            cat_nodes_response = await async_client.cat.nodes(format="json", h=h_string)
             nodes_status = {node["name"]: node for node in cat_nodes_response}
             nodes = {"elasticsearch": {"nodes": nodes_status}}
         except Exception:

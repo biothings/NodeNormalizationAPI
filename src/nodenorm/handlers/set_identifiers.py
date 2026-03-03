@@ -5,7 +5,7 @@ import logging
 import uuid
 from typing import Optional
 
-from biothings.web.handlers import BaseAPIHandler
+from biothings.web.handlers import BaseHandler
 from biothings.web.services.namespace import BiothingsNamespace
 from tornado.web import HTTPError
 
@@ -22,7 +22,7 @@ class SetIDResponse:
     setid: Optional[str] = None
 
 
-class SetIdentifierHandler(BaseAPIHandler):
+class SetIdentifierHandler(BaseHandler):
     """
     Mirror implementation to the renci implementation found at
     https://nodenormalization-sri.renci.org/docs

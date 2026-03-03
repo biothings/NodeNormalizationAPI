@@ -3,11 +3,11 @@ import logging
 import time
 from typing import Union
 
-from biothings.web.handlers import BaseAPIHandler
-from biothings.web.services.namespace import BiothingsNamespace
+from biothings.web.handlers import BaseHandler
 from tornado.web import HTTPError
 
-from nodenorm.handlers.biolink import toolkit
+from nodenorm.biolink import toolkit
+from nodenorm.namespace import NodeNormalizationAPINamespace
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -24,7 +24,7 @@ class NormalizedNode:
     taxa: list[str]
 
 
-class NormalizedNodesHandler(BaseAPIHandler):
+class NormalizedNodesHandler(BaseHandler):
     """
     Mirror implementation to the renci implementation found at
     https://nodenormalization-sri.renci.org/docs
@@ -131,7 +131,6 @@ class NormalizedNodesHandler(BaseAPIHandler):
           }
         }
         """
-        breakpoint()
         normalization_curies = self.args_json.get("curies", [])
         if len(normalization_curies) == 0:
             raise HTTPError(
@@ -161,7 +160,7 @@ class NormalizedNodesHandler(BaseAPIHandler):
 
 
 async def get_normalized_nodes(
-    biothings_metadata: BiothingsNamespace,
+    biothings_metadata: NodeNormalizationAPINamespace,
     curies: list[str],
     conflate_gene_protein: bool = False,
     conflate_chemical_drug: bool = False,
@@ -293,7 +292,7 @@ async def create_normalized_node(
 
 
 async def _lookup_curie_metadata(
-    biothings_metadata: BiothingsNamespace, curies: list[str], conflations: dict
+    biothings_metadata: NodeNormalizationAPINamespace, curies: list[str], conflations: dict
 ) -> list[NormalizedNode]:
     """
     Handles the lookup process for the CURIE identifiers within our elasticsearch instance
@@ -393,8 +392,6 @@ async def _lookup_curie_metadata(
 
                 replacement_types = unique_list(replacement_types)
 
-                labels = [identifier.get("l", "") for identifier in replacement_identifiers]
-
                 node = NormalizedNode(
                     curie=input_curie,
                     canonical_identifier=canonical_identifier,
@@ -406,7 +403,6 @@ async def _lookup_curie_metadata(
                 )
                 nodes.append(node)
             else:
-                labels = [identifier.get("l", "") for identifier in identifiers]
                 node = NormalizedNode(
                     curie=input_curie,
                     canonical_identifier=canonical_identifier,
@@ -454,7 +450,7 @@ def unique_list(seq) -> list:
 
 
 async def _lookup_equivalent_identifiers(
-    biothings_metadata: BiothingsNamespace, curies: list[str]
+    biothings_metadata: NodeNormalizationAPINamespace, curies: list[str]
 ) -> tuple[list, list]:
     if len(curies) == 0:
         return [], []

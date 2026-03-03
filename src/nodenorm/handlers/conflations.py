@@ -1,12 +1,12 @@
 import logging
 
-from biothings.web.handlers import BaseAPIHandler
+from biothings.web.handlers import BaseHandler
 
 
 logger = logging.getLogger(__name__)
 
 
-class ValidConflationsHandler(BaseAPIHandler):
+class ValidConflationsHandler(BaseHandler):
     name = "allowed-conflations"
 
     async def get(self):
