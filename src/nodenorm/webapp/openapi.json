@@ -29,6 +29,7 @@
     "/status": {
       "get": {
         "summary": "Status information on this NodeNorm instance",
+        "tags": ["health"],
         "description": "Returns information about this NodeNorm instance and the elasticsearch instance backing it.",
         "operationId": "status",
         "responses": {
@@ -49,6 +50,7 @@
     "/get_normalized_nodes": {
       "get": {
         "summary": "Get the equivalent identifiers and semantic types for the curie(s) entered.",
+        "tags": ["translator"],
         "description": "Returns the equivalent identifiers and semantic types for the curie(s)",
         "operationId": "get_normalized_node_handler_get_normalized_nodes_get",
         "parameters": [
@@ -144,6 +146,7 @@
       },
       "post": {
         "summary": "Get the equivalent identifiers and semantic types for the curie(s) entered.",
+        "tags": ["translator"],
         "description": "Returns the equivalent identifiers and semantic types for the curie(s). Use the `conflate` flag to choose whether to apply conflation.",
         "operationId": "get_normalized_node_handler_post_get_normalized_nodes_post",
         "requestBody": {
@@ -181,6 +184,7 @@
     "/get_setid": {
       "get": {
         "summary": "Normalize and deduplicate a set of identifiers and return a single hash that represents this set.",
+        "tags": ["translator"],
         "operationId": "get_setid_get_setid_get",
         "parameters": [
           {
@@ -250,6 +254,7 @@
       },
       "post": {
         "summary": "Normalize and deduplicate a set of identifiers and return a single hash that represents this set.",
+        "tags": ["translator"],
         "operationId": "get_setid_get_setid_post",
         "requestBody": {
           "content": {
@@ -317,6 +322,7 @@
     "/get_semantic_types": {
       "get": {
         "summary": "Return a list of BioLink semantic types for which normalization has been attempted.",
+        "tags": ["metadata"],
         "description": "Returns a distinct set of the semantic types discovered in the compendium data.",
         "operationId": "get_semantic_types_handler_get_semantic_types_get",
         "responses": {
@@ -335,6 +341,7 @@
     },
     "/get_allowed_conflations": {
       "get": {
+        "tags": ["metadata"],
         "description": "Returns a list of allowed conflation options",
         "responses": {
           "200": {
@@ -3178,10 +3185,10 @@
       "name": "translator"
     },
     {
-      "name": "Interfaces"
+      "name": "health"
     },
     {
-      "name": "trapi"
+      "name": "metadata"
     }
   ],
   "servers": [
@@ -3193,7 +3200,7 @@
     },
     {
       "description": "Localhost",
-      "url": "https://localhost:8000/nodenorm",
+      "url": "http://localhost:8000/",
       "x-maturity": "development",
       "x-location": "RENCI"
     }
