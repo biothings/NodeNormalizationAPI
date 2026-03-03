@@ -25,7 +25,7 @@ class NodeNormalizationAPINamespace:
 
     def __init__(self, option_configuration: tornado.options.OptionParser):
         self.handlers = {}
-        self.default_configuration = "config/config.default.json"
+        self.default_configuration = "config.default.json"
         self.config: types.SimpleNamespace = self.load_configuration(option_configuration)
         self.elasticsearch: types.SimpleNamespace = self.configure_elasticsearch()
         if self._is_open_telemetry_configurable():
@@ -134,7 +134,13 @@ class NodeNormalizationAPINamespace:
         configuration data structure
         """
         configuration = {}
-        default_configuration = json.loads(importlib.resources.read_text(nodenorm, self.default_configuration))
+
+        # note we have to use this format as relative paths were only supported for
+        # importlib.resources.read_text in python3.13
+        default_configuration_path = importlib.resources.files(nodenorm) / "config" / self.default_configuration
+        with default_configuration_path.open("r", encoding="utf-8") as handle:
+            default_configuration = json.load(handle)
+
         configuration.update(default_configuration)
 
         if option_configuration.conf is not None:

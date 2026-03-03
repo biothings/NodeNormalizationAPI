@@ -15,6 +15,7 @@
     "elasticsearch": {
         "ES_HOST": "http://localhost:9200",
         "ES_INDEX": "nodenorm",
+        "ES_ALIAS": "nodenorm",
         "ES_DOC_TYPE": "node",
         "ES_INDICES": {},
         "ES_ARGS": {
