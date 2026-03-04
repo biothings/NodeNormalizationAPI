@@ -4,26 +4,24 @@ Tests for mocking the set identifier generation handling
 
 import json
 
-import pytest
 import tornado
 from tornado.testing import AsyncHTTPTestCase, gen_test
 from tornado.httpclient import AsyncHTTPClient
-from tornado.ioloop import IOLoop
 
-from web.handlers import EXTRA_HANDLERS
-from web.application import PendingAPI
-from web.settings.configuration import load_configuration
+from nodenorm.namespace import NodeNormalizationAPINamespace
+from nodenorm.application import NodeNormalizationAPI
 
 
 class TestSetIdentifierHandlerGet(AsyncHTTPTestCase):
 
     def get_app(self) -> tornado.web.Application:
-        configuration = load_configuration("config_web/nodenorm.py")
-        configuration.ES_INDICES = {configuration.ES_DOC_TYPE: "nodenorm_20250929_wop2zrjn"}
-        configuration.ES_HOST = "http://su10:9200"
-        app_handlers = EXTRA_HANDLERS
-        app_settings = {"static_path": "static"}
-        application = PendingAPI.get_app(configuration, app_settings, app_handlers)
+        options = tornado.options.OptionParser()
+        configuration_namespace = NodeNormalizationAPINamespace(options)
+
+        # test configuration
+        configuration_namespace.elasticsearch["ES_HOST"] = "http://su10:9200"
+        configuration_namespace.elasticsearch["ES_INDEX"] = "nodenorm_20250507_4ibdxry7"
+        application = NodeNormalizationAPI.get_app(configuration_namespace)
         return application
 
     @gen_test(timeout=1.50)
@@ -66,12 +64,13 @@ class TestSetIdentifierHandlerGet(AsyncHTTPTestCase):
 class TestSetIdentifierHandlerPost(AsyncHTTPTestCase):
 
     def get_app(self) -> tornado.web.Application:
-        configuration = load_configuration("config_web/nodenorm.py")
-        configuration.ES_INDICES = {configuration.ES_DOC_TYPE: "nodenorm_20250929_wop2zrjn"}
-        configuration.ES_HOST = "http://su10:9200"
-        app_handlers = EXTRA_HANDLERS
-        app_settings = {"static_path": "static"}
-        application = PendingAPI.get_app(configuration, app_settings, app_handlers)
+        options = tornado.options.OptionParser()
+        configuration_namespace = NodeNormalizationAPINamespace(options)
+
+        # test configuration
+        configuration_namespace.elasticsearch["ES_HOST"] = "http://su10:9200"
+        configuration_namespace.elasticsearch["ES_INDEX"] = "nodenorm_20250507_4ibdxry7"
+        application = NodeNormalizationAPI.get_app(configuration_namespace)
         return application
 
     @gen_test(timeout=1.50)

@@ -8,20 +8,20 @@ import tornado
 from tornado.testing import AsyncHTTPTestCase, gen_test
 from tornado.httpclient import AsyncHTTPClient
 
-from web.handlers import EXTRA_HANDLERS
-from web.application import PendingAPI
-from web.settings.configuration import load_configuration
+from nodenorm.namespace import NodeNormalizationAPINamespace
+from nodenorm.application import NodeNormalizationAPI
 
 
 class TestNodeNormalizationHandler(AsyncHTTPTestCase):
 
     def get_app(self) -> tornado.web.Application:
-        configuration = load_configuration("config_web/nodenorm.py")
-        configuration.ES_INDICES = {configuration.ES_DOC_TYPE: "nodenorm_20250507_4ibdxry7"}
-        configuration.ES_HOST = "http://su10:9200"
-        app_handlers = EXTRA_HANDLERS
-        app_settings = {"static_path": "static"}
-        application = PendingAPI.get_app(configuration, app_settings, app_handlers)
+        options = tornado.options.OptionParser()
+        configuration_namespace = NodeNormalizationAPINamespace(options)
+
+        # test configuration
+        configuration_namespace.elasticsearch["ES_HOST"] = "http://su10:9200"
+        configuration_namespace.elasticsearch["ES_INDEX"] = "nodenorm_20250507_4ibdxry7"
+        application = NodeNormalizationAPI.get_app(configuration_namespace)
         return application
 
     @gen_test(timeout=0.50)
