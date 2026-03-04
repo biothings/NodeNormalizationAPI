@@ -19,7 +19,7 @@ class NodeNormHealthHandler(BaseHandler):
         async_client: AsyncElasticsearch = self.biothings.elasticsearch.async_client
         search_indices = self.biothings.elasticsearch.indices
 
-        biothings_metadata = async_client.indices.get(search_indices)
+        biothings_metadata = await async_client.indices.get(search_indices)
         compendia_url = self.biothings.metadata.biothing_metadata["node"]["src"]["nodenorm"]["url"]
         parsed_compendia_url = urlparse(compendia_url)
         babel_version = parsed_compendia_url.path.split("/")[-2]

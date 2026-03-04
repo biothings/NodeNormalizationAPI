@@ -1,6 +1,7 @@
 # set_id.py
 # Code related to generating IDs for sets (as in https://github.com/TranslatorSRI/NodeNormalization/issues/256).
 import dataclasses
+import json
 import logging
 import uuid
 from typing import Optional
@@ -54,18 +55,20 @@ class SetIdentifierHandler(BaseHandler):
         self.finish(set_identifiers)
 
     async def post(self):
-        curie_arguments = self.args_json
-        if len(curie_arguments) == 0:
+        post_body: list[dict] = json.loads(self.request.body)
+        if len(post_body) == 0:
             raise HTTPError(
                 detail="Missing JSON body, there must be at least one curie to generate a set identifier",
                 status_code=400,
             )
 
-        set_identifiers = []
-        for group in curie_arguments:
+        # We have to make a minor change to the API to ensure we're avoiding a security concern
+        # enforced by tornado, so we return a dictionary here instead of a list
+        set_identifiers = {}
+        for index, group in enumerate(post_body):
             curies = group.get("curies", [])
             conflations = group.get("conflations", [])
-            set_identifiers.append(await generate_setid(self.biothings, curies, conflations))
+            set_identifiers[index] = await generate_setid(self.biothings, curies, conflations)
 
         if not set_identifiers:
             raise HTTPError(detail="Error occurred during processing.", status_code=500)

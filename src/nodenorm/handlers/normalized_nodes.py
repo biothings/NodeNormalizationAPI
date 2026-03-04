@@ -1,4 +1,5 @@
 import dataclasses
+import json
 import logging
 import time
 from typing import Union
@@ -131,16 +132,17 @@ class NormalizedNodesHandler(BaseHandler):
           }
         }
         """
-        normalization_curies = self.args_json.get("curies", [])
+        post_body: dict = json.loads(self.request.body)
+        normalization_curies = post_body.get("curies", [])
         if len(normalization_curies) == 0:
             raise HTTPError(
                 detail="Missing curie argument, there must be at least one curie to normalize", status_code=400
             )
 
-        conflate = self.args_json.get("conflate", True)
-        drug_chemical_conflate = self.args_json.get("drug_chemical_conflate", False)
-        description = self.args_json.get("description", False)
-        individual_types = self.args_json.get("individual_types", False)
+        conflate = post_body.get("conflate", True)
+        drug_chemical_conflate = post_body.get("drug_chemical_conflate", False)
+        description = post_body.get("description", False)
+        individual_types = post_body.get("individual_types", False)
 
         normalized_nodes = await get_normalized_nodes(
             self.biothings,
