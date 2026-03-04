@@ -18,10 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 class NodeNormalizationAPINamespace:
-    """Simplied namespace instance for our NodeNormalization API.
-
-    The namespace loads our configuration for the web API
-    """
+    """Simplied namespace instance for our NodeNormalization API."""
 
     def __init__(self, option_configuration: tornado.options.OptionParser):
         self.handlers = {}
@@ -72,7 +69,7 @@ class NodeNormalizationAPINamespace:
         elasticsearch_namespace.async_client = connections.es.get_async_client(
             elasticsearch_configuration["ES_HOST"], **elasticsearch_configuration["ES_ARGS"]
         )
-        elasticsearch_namespace.index = self._validate_elasticsearch_index(elasticsearch_namespace)
+        elasticsearch_namespace.indices = self._validate_elasticsearch_index(elasticsearch_namespace)
         return elasticsearch_namespace
 
     def _validate_elasticsearch_index(self, elasticsearch_namespace: types.SimpleNamespace) -> dict:
