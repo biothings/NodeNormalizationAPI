@@ -156,10 +156,10 @@ class NodeNormalizationAPINamespace:
 
         # override options
         if option_configuration.host is not None:
-            configuration_namespace.webserver.HOST = option_configuration.host
+            configuration_namespace.webserver["HOST"] = option_configuration.host
 
         if option_configuration.port is not None:
-            configuration_namespace.webserver.PORT = option_configuration.port
+            configuration_namespace.webserver["PORT"] = option_configuration.port
 
         return configuration_namespace
 
