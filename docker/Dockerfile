@@ -21,11 +21,11 @@ COPY --from=builder --chown=nodenorm:nodenorm /build/wheels /home/nodenorm/wheel
 RUN /home/nodenorm/venv/bin/pip install /home/nodenorm/wheels/*.whl && rm -rf /home/nodenorm/wheels
 
 WORKDIR /home/nodenorm/configuration
-COPY --from=builder --chown=nodenorm:nodenorm /build/nodenorm/nodenorm/application/configuration/default.json /home/nodenorm/configuration
+COPY --from=builder --chown=nodenorm:nodenorm /build/nodenorm/src/nodenorm/config/config.default.json /home/nodenorm/configuration/default.json
 COPY --from=builder --chown=nodenorm:nodenorm /build/nodenorm/version.txt /home/nodenorm/configuration/version.txt
 
-COPY --from=builder --chown=nodenorm:nodenorm /build/nodenorm/docker/configuration/supervisord.conf /etc/supervisor/supervisord.conf
-COPY --from=builder --chown=nodenorm:nodenorm /build/nodenorm/docker/configuration/Caddyfile /etc/caddy/Caddyfile
+COPY --chown=nodenorm:nodenorm docker/configuration/supervisord.conf /etc/supervisor/supervisord.conf
+COPY --chown=nodenorm:nodenorm docker/configuration/Caddyfile /etc/caddy/Caddyfile
 
 COPY --from=caddy_builder --chown=nodenorm:nodenorm /usr/bin/caddy /usr/bin/caddy
 
