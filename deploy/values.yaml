@@ -1,4 +1,4 @@
-# Default values for biothings-annotator.
+# Default values for node-normalization.
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
@@ -14,15 +14,15 @@ deployment:
       # A new pod will only be created after an old pod is taken down.
       maxSurge: 0
 image:
-  repository: 853771734544.dkr.ecr.us-east-1.amazonaws.com/translator-bte-pending-api-annotator
+  repository: 853771734544.dkr.ecr.us-east-1.amazonaws.com/translator-node-normalization-api
   pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion.
   tag: DOCKER_VERSION_VALUE
 
 containers:
-  name: biothingsannotator
+  name: node-normalization
   es_host: ES_HOST_VALUE
-  port: 9000
+  port: 8000
 
 env:
   OPENTELEMETRY_ENABLED_VALUE: True
@@ -44,13 +44,13 @@ ingress:
     alb.ingress.kubernetes.io/actions.ssl-redirect: '{"Type": "redirect", "RedirectConfig": { "Protocol": "HTTPS", "Port": "443", "StatusCode": "HTTP_301"}}'
     alb.ingress.kubernetes.io/success-codes: '200'
     alb.ingress.kubernetes.io/load-balancer-attributes: idle_timeout.timeout_seconds=600
-  host: BTEPA_HOSTNAME_VALUE
+  host: NODE_NORM_HOSTNAME_VALUE
 
 ncats:
   labels:
     gov.nih.ncats.appenv: appenv
-    gov.nih.ncats.appname: bte-biothings-annotator
-    gov.nih.ncats.appentry: BTEPA_HOSTNAME_VALUE
+    gov.nih.ncats.appname: bte-node-normalization
+    gov.nih.ncats.appentry: NODE_NORM_HOSTNAME_VALUE
     gov.nih.ncats.appentrytype: https
     gov.nih.ncats.appentryport: tcp
     gov.nih.ncats.appconnnum: '1'

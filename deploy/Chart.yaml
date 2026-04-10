@@ -1,6 +1,6 @@
 apiVersion: v2
-name: biothings-annotator
-description: A Helm chart for Biothings/pending.api-annotator
+name: node-normalization
+description: A Helm chart for NodeNormalizationAPI
 
 # A chart can be either an 'application' or a 'library' chart.
 #
