@@ -68,7 +68,7 @@ telemetry = [
 
 
 [project.urls]
-"Homepage" = "https://github.com/biothings/biothings_annotator"
+"Homepage" = "https://github.com/biothings/NodeNormalizationAPI"
 
 
 [tool.black]
