@@ -24,8 +24,8 @@ WORKDIR /home/nodenorm/configuration
 COPY --from=builder --chown=nodenorm:nodenorm /build/nodenorm/src/nodenorm/config/config.default.json /home/nodenorm/configuration/default.json
 COPY --from=builder --chown=nodenorm:nodenorm /build/nodenorm/version.txt /home/nodenorm/configuration/version.txt
 
-COPY --chown=nodenorm:nodenorm docker/configuration/supervisord.conf /etc/supervisor/supervisord.conf
-COPY --chown=nodenorm:nodenorm docker/configuration/Caddyfile /etc/caddy/Caddyfile
+COPY --chown=nodenorm:nodenorm ./docker/configuration/supervisord.conf /etc/supervisor/supervisord.conf
+COPY --chown=nodenorm:nodenorm ./docker/configuration/Caddyfile /etc/caddy/Caddyfile
 
 COPY --from=caddy_builder --chown=nodenorm:nodenorm /usr/bin/caddy /usr/bin/caddy
 
