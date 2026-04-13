@@ -37,7 +37,7 @@ COPY --from=builder /build/nodenorm/src/nodenorm/config/config.default.json \
 COPY --from=builder /build/nodenorm/version.txt \
     /home/nodenorm/configuration/version.txt
 
-COPY pwd && ls 
+RUN pwd && ls 
 # ✅ LOCAL CONFIG FILES (THIS IS THE FIX)
 COPY docker/configuration/supervisord.conf /etc/supervisor/supervisord.conf
 COPY docker/configuration/Caddyfile /etc/caddy/Caddyfile
