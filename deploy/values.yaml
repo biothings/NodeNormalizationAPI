@@ -2,6 +2,9 @@
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
+# Override the full deployment name to prevent release name prefix
+fullnameOverride: "node-normalization"
+
 deployment:
   replicaCount: 1
   strategy:
