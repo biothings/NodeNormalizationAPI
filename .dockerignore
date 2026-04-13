@@ -1,0 +1,8 @@
+# ignore everything
+*
+
+# allow required files
+!Dockerfile
+!docker/
+!docker/configuration/
+!docker/configuration/*
