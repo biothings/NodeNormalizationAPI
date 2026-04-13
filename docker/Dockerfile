@@ -23,8 +23,8 @@ RUN python -m venv /home/nodenorm/venv
 COPY --from=builder --chown=nodenorm:nodenorm /build/wheels /home/nodenorm/wheels
 RUN /home/nodenorm/venv/bin/pip install /home/nodenorm/wheels/*.whl && rm -rf /home/nodenorm/wheels
 
-# Fix Elasticsearch API compatibility issue in health handler
-RUN sed -i 's/biothings_metadata = await async_client.indices.get(search_indices)/biothings_metadata = await async_client.indices.get(index=search_indices)/' /home/nodenorm/venv/lib/python3.12/site-packages/nodenorm/handlers/health.py
+# Apply patches to fix NodeNormalization compatibility issues
+COPY --chown=nodenorm:nodenorm patches/health.py /home/nodenorm/venv/lib/python3.12/site-packages/nodenorm/handlers/health.py
 
 WORKDIR /home/nodenorm/configuration
 COPY --from=builder --chown=nodenorm:nodenorm /build/nodenorm/src/nodenorm/config/config.default.json /home/nodenorm/configuration/default.json
