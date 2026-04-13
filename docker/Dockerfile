@@ -16,22 +16,36 @@ RUN apt update -q -y && apt install -y --no-install-recommends git supervisor cu
 RUN useradd -m nodenorm && usermod -aG sudo nodenorm
 USER nodenorm
 WORKDIR /home/nodenorm/
+# Set PyStow home directory to a writable location
+ENV PYSTOW_HOME=/home/nodenorm/.pystow
+RUN mkdir -p /home/nodenorm/.pystow
 RUN python -m venv /home/nodenorm/venv
 COPY --from=builder --chown=nodenorm:nodenorm /build/wheels /home/nodenorm/wheels
 RUN /home/nodenorm/venv/bin/pip install /home/nodenorm/wheels/*.whl && rm -rf /home/nodenorm/wheels
+
+# Apply patches to fix NodeNormalization compatibility issues
+COPY --chown=nodenorm:nodenorm patches/health.py /home/nodenorm/venv/lib/python3.12/site-packages/nodenorm/handlers/health.py
 
 WORKDIR /home/nodenorm/configuration
 COPY --from=builder --chown=nodenorm:nodenorm /build/nodenorm/src/nodenorm/config/config.default.json /home/nodenorm/configuration/default.json
 COPY --from=builder --chown=nodenorm:nodenorm /build/nodenorm/version.txt /home/nodenorm/configuration/version.txt
 
-COPY --chown=nodenorm:nodenorm docker/configuration/supervisord.conf /etc/supervisor/supervisord.conf
-COPY --chown=nodenorm:nodenorm docker/configuration/Caddyfile /etc/caddy/Caddyfile
+# Override with corrected configuration
+COPY --chown=nodenorm:nodenorm configuration/config.json /home/nodenorm/configuration/config.json
 
-COPY --from=caddy_builder --chown=nodenorm:nodenorm /usr/bin/caddy /usr/bin/caddy
+# Switch back to root for system-level operations
+USER root
+COPY configuration/supervisord.conf /etc/supervisor/supervisord.conf
+COPY configuration/Caddyfile /etc/caddy/Caddyfile
+COPY --from=caddy_builder /usr/bin/caddy /usr/bin/caddy
+# Switch back to nodenorm user for runtime
+USER nodenorm
 
 
 STOPSIGNAL SIGINT
-EXPOSE 9000
+EXPOSE 8000
 
+# Run supervisord as root to manage processes 
+USER root
 ENTRYPOINT ["supervisord"]
 CMD ["-c", "/etc/supervisor/supervisord.conf"]

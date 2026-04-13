@@ -1,9 +1,9 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "biothings-annotator.fullname" . }}
+  name: {{ include "node-normalization.fullname" . }}
   labels:
-    {{- include "biothings-annotator.labels" . | nindent 4 }}
+    {{- include "node-normalization.labels" . | nindent 4 }}
 spec:
   type: {{ .Values.service.type }}
   ports:
@@ -12,4 +12,4 @@ spec:
       protocol: TCP
       name: http
   selector:
-    {{- include "biothings-annotator.selectorLabels" . | nindent 4 }}
+    {{- include "node-normalization.selectorLabels" . | nindent 4 }}

@@ -1,7 +1,7 @@
 {{/*
 Expand the name of the chart.
 */}}
-{{- define "biothings-annotator.name" -}}
+{{- define "node-normalization.name" -}}
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
@@ -10,7 +10,7 @@ Create a default fully qualified app name.
 We truncate at 63 chars because some Kubernetes name fields are limited to this (by the DNS naming spec).
 If release name contains chart name it will be used as a full name.
 */}}
-{{- define "biothings-annotator.fullname" -}}
+{{- define "node-normalization.fullname" -}}
 {{- if .Values.fullnameOverride }}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
 {{- else }}
@@ -26,16 +26,16 @@ If release name contains chart name it will be used as a full name.
 {{/*
 Create chart name and version as used by the chart label.
 */}}
-{{- define "biothings-annotator.chart" -}}
+{{- define "node-normalization.chart" -}}
 {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/*
 Common labels
 */}}
-{{- define "biothings-annotator.labels" -}}
-helm.sh/chart: {{ include "biothings-annotator.chart" . }}
-{{ include "biothings-annotator.selectorLabels" . }}
+{{- define "node-normalization.labels" -}}
+helm.sh/chart: {{ include "node-normalization.chart" . }}
+{{ include "node-normalization.selectorLabels" . }}
 {{- if .Chart.AppVersion }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
@@ -45,7 +45,7 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{/*
 Selector labels
 */}}
-{{- define "biothings-annotator.selectorLabels" -}}
-app.kubernetes.io/name: {{ include "biothings-annotator.name" . }}
+{{- define "node-normalization.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "node-normalization.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
