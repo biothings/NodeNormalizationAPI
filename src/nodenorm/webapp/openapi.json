@@ -3194,7 +3194,7 @@
   "servers": [
     {
       "description": "Default server",
-      "url": "https://biothings.ci.transltr.io/nodenorm",
+      "url": "https://nodenorm-es.ci.transltr.io/",
       "x-maturity": "development",
       "x-location": "RENCI"
     },
