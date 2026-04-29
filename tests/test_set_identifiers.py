@@ -19,8 +19,12 @@ class TestSetIdentifierHandlerGet(AsyncHTTPTestCase):
         configuration_namespace = NodeNormalizationAPINamespace(options)
 
         # test configuration
-        configuration_namespace.elasticsearch["ES_HOST"] = "http://su10:9200"
-        configuration_namespace.elasticsearch["ES_INDEX"] = "nodenorm_20250507_4ibdxry7"
+        configuration_namespace.config.elasticsearch["ES_HOST"] = "http://su10:9200"
+        configuration_namespace.config.elasticsearch["ES_INDEX"] = "nodenorm_20251106_lv86fxt0"
+
+        configuration_namespace.config.elasticsearch["ES_HOST"] = "http://core-components-es.ci.transltr.io:9200"
+        configuration_namespace.config.elasticsearch["ES_INDEX"] = "nodenorm_20251106_lv86fxt0"
+
         application = NodeNormalizationAPI.get_app(configuration_namespace)
         return application
 
@@ -43,7 +47,7 @@ class TestSetIdentifierHandlerGet(AsyncHTTPTestCase):
             DrugChemical
         }
         """
-        normalized_nodes_endpoint = r"/nodenorm/get_setid"
+        normalized_nodes_endpoint = r"/get_setid"
         url = self.get_url(normalized_nodes_endpoint)
         full_url = f"{url}?curie=MESH%3AD014867&curie=NCIT%3AC34373&curie=UNII%3A63M8RYN44N&curie=RUBBISH%3A1234&conflation=GeneProtein&conflation=DrugChemical"
 
@@ -68,8 +72,12 @@ class TestSetIdentifierHandlerPost(AsyncHTTPTestCase):
         configuration_namespace = NodeNormalizationAPINamespace(options)
 
         # test configuration
-        configuration_namespace.elasticsearch["ES_HOST"] = "http://su10:9200"
-        configuration_namespace.elasticsearch["ES_INDEX"] = "nodenorm_20250507_4ibdxry7"
+        configuration_namespace.config.elasticsearch["ES_HOST"] = "http://su10:9200"
+        configuration_namespace.config.elasticsearch["ES_INDEX"] = "nodenorm_20251106_lv86fxt0"
+
+        configuration_namespace.config.elasticsearch["ES_HOST"] = "http://core-components-es.ci.transltr.io:9200"
+        configuration_namespace.config.elasticsearch["ES_INDEX"] = "nodenorm_20251106_lv86fxt0"
+
         application = NodeNormalizationAPI.get_app(configuration_namespace)
         return application
 
@@ -78,7 +86,7 @@ class TestSetIdentifierHandlerPost(AsyncHTTPTestCase):
         """
         Tests the get_setid endpoint via POST request
         """
-        normalized_nodes_endpoint = r"/nodenorm/get_setid"
+        normalized_nodes_endpoint = r"/get_setid"
         url = self.get_url(normalized_nodes_endpoint)
 
         body = json.dumps(

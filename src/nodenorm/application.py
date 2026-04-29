@@ -6,7 +6,10 @@ Responsible for generating the tornado.web.Application instance
 """
 
 import logging
-from typing import override
+try:
+    from typing import override
+except ImportError:
+    from typing_extensions import override
 
 from biothings.web.applications import TornadoBiothingsAPI
 
@@ -22,6 +25,7 @@ class NodeNormalizationAPI(TornadoBiothingsAPI):
     @classmethod
     def get_app(cls, namespace: NodeNormalizationAPINamespace):
         """Generator for the TornadoApplication instance."""
+        namespace.elasticsearch = namespace.configure_elasticsearch()
         handlers = build_handlers()
         namespace.populate_handlers(handlers)
         settings = namespace.config.webserver["SETTINGS"]

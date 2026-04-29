@@ -24,7 +24,7 @@ class NodeNormalizationAPINamespace:
         self.handlers = {}
         self.default_configuration = "config.default.json"
         self.config: types.SimpleNamespace = self.load_configuration(option_configuration)
-        self.elasticsearch: types.SimpleNamespace = self.configure_elasticsearch()
+        self.elasticsearch: types.SimpleNamespace = types.SimpleNamespace()
         if self._is_open_telemetry_configurable():
             self.configure_telemetry()
 
@@ -66,6 +66,11 @@ class NodeNormalizationAPINamespace:
         elasticsearch_namespace.client = connections.es.get_client(
             elasticsearch_configuration["ES_HOST"], **elasticsearch_configuration["ES_ARGS"]
         )
+        # Always create a fresh async client so it is bound to the current event loop.
+        # The biothings pool caches by (host, settings) hash; clearing the cache entry
+        # here ensures aiohttp does not reuse a session from a previous (closed) loop.
+        async_hash = connections._ClientPool.hash((elasticsearch_configuration["ES_HOST"], elasticsearch_configuration["ES_ARGS"]))
+        connections.es._async_clients.pop(async_hash, None)
         elasticsearch_namespace.async_client = connections.es.get_async_client(
             elasticsearch_configuration["ES_HOST"], **elasticsearch_configuration["ES_ARGS"]
         )
@@ -140,7 +145,7 @@ class NodeNormalizationAPINamespace:
 
         configuration.update(default_configuration)
 
-        if option_configuration.conf is not None:
+        if getattr(option_configuration, 'conf', None) is not None:
             optional_configuration = pathlib.Path(option_configuration.conf).absolute().resolve()
             if optional_configuration.exists():
                 with open(optional_configuration, "r", encoding="utf-8") as handle:
@@ -155,10 +160,10 @@ class NodeNormalizationAPINamespace:
         configuration_namespace = types.SimpleNamespace(**configuration)
 
         # override options
-        if option_configuration.host is not None:
+        if getattr(option_configuration, 'host', None) is not None:
             configuration_namespace.webserver["HOST"] = option_configuration.host
 
-        if option_configuration.port is not None:
+        if getattr(option_configuration, 'port', None) is not None:
             configuration_namespace.webserver["PORT"] = option_configuration.port
 
         return configuration_namespace

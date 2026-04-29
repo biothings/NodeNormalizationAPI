@@ -55,12 +55,17 @@ class SetIdentifierHandler(BaseHandler):
         self.finish(set_identifiers)
 
     async def post(self):
-        post_body: list[dict] = json.loads(self.request.body)
-        if len(post_body) == 0:
+        post_body = json.loads(self.request.body)
+        if not post_body:
             raise HTTPError(
                 detail="Missing JSON body, there must be at least one curie to generate a set identifier",
                 status_code=400,
             )
+
+        # Accept either a single group dict or a list of group dicts
+        single = isinstance(post_body, dict)
+        if single:
+            post_body = [post_body]
 
         # We have to make a minor change to the API to ensure we're avoiding a security concern
         # enforced by tornado, so we return a dictionary here instead of a list
@@ -73,7 +78,8 @@ class SetIdentifierHandler(BaseHandler):
         if not set_identifiers:
             raise HTTPError(detail="Error occurred during processing.", status_code=500)
 
-        self.finish(set_identifiers)
+        # Return the single result directly when a single group was submitted
+        self.finish(set_identifiers[0] if single else set_identifiers)
 
 
 async def generate_setid(
