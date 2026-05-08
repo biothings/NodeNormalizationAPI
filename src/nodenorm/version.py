@@ -1,8 +1,8 @@
 import logging
 import os
 import pathlib
-from collections.abc import Iterable
-from functools import cache
+from functools import lru_cache
+from typing import Iterable, Optional
 
 from git import InvalidGitRepositoryError, NoSuchPathError, Repo
 
@@ -14,7 +14,7 @@ VERSION_FILE_ENV_VAR = "NODENORM_VERSION_FILE"
 CONTAINER_VERSION_FILE = pathlib.Path("/home/nodenorm/configuration") / VERSION_FILE_NAME
 
 
-def read_version_file(version_file_paths: Iterable[pathlib.Path] | None = None) -> str | None:
+def read_version_file(version_file_paths: Optional[Iterable[pathlib.Path]] = None) -> Optional[str]:
     """Read the build-time version file when the app is running from a packaged image."""
     candidate_paths = []
     configured_path = os.getenv(VERSION_FILE_ENV_VAR)
@@ -38,8 +38,8 @@ def read_version_file(version_file_paths: Iterable[pathlib.Path] | None = None) 
     return None
 
 
-@cache
-def get_github_commit_hash(source_path: pathlib.Path | None = None) -> str:
+@lru_cache(maxsize=None)
+def get_github_commit_hash(source_path: Optional[pathlib.Path] = None) -> str:
     """Retrieve the current GitHub commit hash using gitpython."""
     try:
         repo_path = source_path or pathlib.Path(__file__).resolve()
@@ -54,6 +54,6 @@ def get_github_commit_hash(source_path: pathlib.Path | None = None) -> str:
         return UNKNOWN_VERSION
 
 
-@cache
+@lru_cache(maxsize=None)
 def get_version() -> str:
     return read_version_file() or get_github_commit_hash()

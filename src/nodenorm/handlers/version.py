@@ -9,5 +9,6 @@ class VersionHandler(BaseHandler):
     name = "version"
 
     async def get(self, *args, **kwargs):
-        version = await asyncio.to_thread(get_version)
+        loop = asyncio.get_running_loop()
+        version = await loop.run_in_executor(None, get_version)
         self.write({"version": version})
