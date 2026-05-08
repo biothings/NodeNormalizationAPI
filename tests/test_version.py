@@ -8,8 +8,6 @@ def clear_version_caches():
     nodenorm_version.get_github_commit_hash.cache_clear()
     nodenorm_version.get_version.cache_clear()
     yield
-    nodenorm_version.get_github_commit_hash.cache_clear()
-    nodenorm_version.get_version.cache_clear()
 
 
 def test_read_version_file_uses_configured_path(tmp_path, monkeypatch):
