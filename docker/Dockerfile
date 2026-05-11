@@ -1,6 +1,6 @@
 FROM python:3.12 AS builder
 
-ARG NODENORM_REPO=https://github.com/biothings/NodeNormalizationAPI.git
+ARG NODENORM_REPO=https://github.com/chevvak2/NodeNormalizationAPI.git
 ARG NODENORM_BRANCH=main
 
 WORKDIR /build/nodenorm

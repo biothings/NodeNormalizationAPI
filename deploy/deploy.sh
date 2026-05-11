@@ -1,6 +1,6 @@
 #!/bin/bash
 
-projectName="biothings-annotator"
+projectName="node-normalization"
 namespace="bte"
 
 #set +x
