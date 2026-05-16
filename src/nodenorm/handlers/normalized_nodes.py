@@ -4,10 +4,10 @@ import logging
 import time
 from typing import Union
 
-from biothings.web.handlers import BaseHandler
 from tornado.web import HTTPError
 
 from nodenorm.biolink import toolkit
+from nodenorm.handlers.base import NodeNormalizationBaseHandler
 from nodenorm.namespace import NodeNormalizationAPINamespace
 
 logger = logging.getLogger(__name__)
@@ -25,7 +25,7 @@ class NormalizedNode:
     taxa: list[str]
 
 
-class NormalizedNodesHandler(BaseHandler):
+class NormalizedNodesHandler(NodeNormalizationBaseHandler):
     """
     Mirror implementation to the renci implementation found at
     https://nodenormalization-sri.renci.org/docs

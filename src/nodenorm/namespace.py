@@ -140,8 +140,9 @@ class NodeNormalizationAPINamespace:
 
         configuration.update(default_configuration)
 
-        if option_configuration.conf is not None:
-            optional_configuration = pathlib.Path(option_configuration.conf).absolute().resolve()
+        optional_configuration_file = getattr(option_configuration, "conf", None)
+        if optional_configuration_file is not None:
+            optional_configuration = pathlib.Path(optional_configuration_file).absolute().resolve()
             if optional_configuration.exists():
                 with open(optional_configuration, "r", encoding="utf-8") as handle:
                     configuration.update(json.load(handle))
@@ -155,11 +156,13 @@ class NodeNormalizationAPINamespace:
         configuration_namespace = types.SimpleNamespace(**configuration)
 
         # override options
-        if option_configuration.host is not None:
-            configuration_namespace.webserver["HOST"] = option_configuration.host
+        option_host = getattr(option_configuration, "host", None)
+        if option_host is not None:
+            configuration_namespace.webserver["HOST"] = option_host
 
-        if option_configuration.port is not None:
-            configuration_namespace.webserver["PORT"] = option_configuration.port
+        option_port = getattr(option_configuration, "port", None)
+        if option_port is not None:
+            configuration_namespace.webserver["PORT"] = option_port
 
         return configuration_namespace
 

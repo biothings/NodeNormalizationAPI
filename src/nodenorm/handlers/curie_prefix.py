@@ -1,10 +1,10 @@
-from biothings.web.handlers import BaseHandler
 from tornado.web import HTTPError
 
 from nodenorm.biolink import toolkit
+from nodenorm.handlers.base import NodeNormalizationBaseHandler
 
 
-class SemanticTypeHandler(BaseHandler):
+class SemanticTypeHandler(NodeNormalizationBaseHandler):
     """
     Mirror implementation to the renci implementation found at
     https://nodenormalization-sri.renci.org/docs
