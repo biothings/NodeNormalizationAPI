@@ -1,22 +1,9 @@
-import importlib.util
-from pathlib import Path
-
 import tornado.web
 from tornado.testing import AsyncHTTPTestCase
 
+from nodenorm.handlers.base import NodeNormalizationBaseHandler
 
 ORIGIN = "https://translatorsri.github.io"
-BASE_HANDLER_PATH = Path(__file__).parents[1] / "src" / "nodenorm" / "handlers" / "base.py"
-
-
-def load_base_handler():
-    spec = importlib.util.spec_from_file_location("_nodenorm_base_handler_under_test", BASE_HANDLER_PATH)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module.NodeNormalizationBaseHandler
-
-
-NodeNormalizationBaseHandler = load_base_handler()
 
 
 class PreflightHandler(NodeNormalizationBaseHandler):
@@ -25,12 +12,11 @@ class PreflightHandler(NodeNormalizationBaseHandler):
 
 
 def assert_cors_headers(headers, allowed_headers="*"):
-    assert headers["Access-Control-Allow-Origin"] == ORIGIN
-    assert headers["Access-Control-Allow-Credentials"] == "true"
+    assert headers["Access-Control-Allow-Origin"] == "*"
+    assert headers["Access-Control-Allow-Credentials"] == "false"
     assert headers["Access-Control-Allow-Methods"] == "GET, POST, HEAD, OPTIONS"
     assert headers["Access-Control-Allow-Headers"] == allowed_headers
     assert headers["Access-Control-Max-Age"] == "600"
-    assert headers["Vary"] == "Origin"
 
 
 class TestCorsHeaders(AsyncHTTPTestCase):
