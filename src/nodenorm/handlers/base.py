@@ -11,6 +11,8 @@ class NodeNormalizationBaseHandler(BaseHandler):
     cors_max_age = "600"
 
     def set_default_headers(self):
+        super().set_default_headers()
+
         origin = self.request.headers.get("Origin")
         if origin is None:
             return
