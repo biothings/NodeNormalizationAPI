@@ -1,9 +1,8 @@
-from biothings.web.handlers import BaseHandler
-
+from nodenorm.handlers.base import NodeNormalizationBaseHandler
 from nodenorm.version import get_version
 
 
-class VersionHandler(BaseHandler):
+class VersionHandler(NodeNormalizationBaseHandler):
     name = "version"
 
     async def get(self, *args, **kwargs):

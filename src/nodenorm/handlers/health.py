@@ -2,12 +2,11 @@ from urllib.parse import urlparse
 
 from elasticsearch import AsyncElasticsearch
 
-from biothings.web.handlers import BaseHandler
-
 from nodenorm.biolink import BIOLINK_MODEL_VERSION
+from nodenorm.handlers.base import NodeNormalizationBaseHandler
 
 
-class NodeNormHealthHandler(BaseHandler):
+class NodeNormHealthHandler(NodeNormalizationBaseHandler):
     """
     Important Endpoints
     * /_cat/nodes
