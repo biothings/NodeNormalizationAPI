@@ -7,7 +7,6 @@ class NodeNormalizationBaseHandler(BaseHandler):
     """Base handler that keeps the lightweight BioThings handler plus CORS."""
 
     cors_origin = "*"
-    cors_allow_credentials = "false"
     cors_methods = "GET, POST, HEAD, OPTIONS"
     cors_max_age = "600"
 
@@ -19,7 +18,6 @@ class NodeNormalizationBaseHandler(BaseHandler):
         requested_headers = self.request.headers.get("Access-Control-Request-Headers")
 
         self.set_header("Access-Control-Allow-Origin", self.cors_origin)
-        self.set_header("Access-Control-Allow-Credentials", self.cors_allow_credentials)
         self.set_header("Access-Control-Allow-Methods", self.cors_methods)
         self.set_header("Access-Control-Allow-Headers", requested_headers or "*")
         self.set_header("Access-Control-Max-Age", self.cors_max_age)

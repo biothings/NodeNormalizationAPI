@@ -13,7 +13,7 @@ class PreflightHandler(NodeNormalizationBaseHandler):
 
 def assert_cors_headers(headers, allowed_headers="*"):
     assert headers["Access-Control-Allow-Origin"] == "*"
-    assert headers["Access-Control-Allow-Credentials"] == "false"
+    assert "Access-Control-Allow-Credentials" not in headers
     assert headers["Access-Control-Allow-Methods"] == "GET, POST, HEAD, OPTIONS"
     assert headers["Access-Control-Allow-Headers"] == allowed_headers
     assert headers["Access-Control-Max-Age"] == "600"
