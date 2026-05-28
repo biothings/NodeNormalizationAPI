@@ -201,7 +201,7 @@ async def get_normalized_nodes(
 
 async def create_normalized_node(
     aggregate_node: NormalizedNode,
-    include_descriptions: bool = True,
+    include_descriptions: bool = False,
     include_individual_types: bool = False,
     conflations: dict = None,
 ) -> dict:
@@ -254,16 +254,19 @@ async def create_normalized_node(
         else:
             normal_node = {"id": {"identifier": aggregate_node.canonical_identifier}}
 
-    # if descriptions are enabled, look for the first available description and use that
+    # if descriptions are enabled, collect all available descriptions and use the first as the preferred one
     if include_descriptions:
-        descriptions = list(
-            map(
-                lambda x: x[0],
-                filter(lambda x: len(x) > 0, [eid["d"] for eid in aggregate_node.identifiers if "d" in eid]),
-            )
+        descriptions = unique_list(
+            [
+                description
+                for identifier in aggregate_node.identifiers
+                for description in identifier.get("d", [])
+                if description
+            ]
         )
         if len(descriptions) > 0:
             normal_node["id"]["description"] = descriptions[0]
+            normal_node["descriptions"] = descriptions
 
     # now need to reformat the identifier keys.  It could be cleaner but we have to worry about if there is a label
     normal_node["equivalent_identifiers"] = []
