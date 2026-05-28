@@ -41,6 +41,8 @@ def load_normalized_nodes_module():
 normalized_nodes = load_normalized_nodes_module()
 _lookup_curie_metadata = normalized_nodes._lookup_curie_metadata
 _lookup_equivalent_identifiers = normalized_nodes._lookup_equivalent_identifiers
+create_normalized_node = normalized_nodes.create_normalized_node
+NormalizedNode = normalized_nodes.NormalizedNode
 
 
 class FakeAsyncElasticsearch:
@@ -76,6 +78,50 @@ def hit_response(curie, source=None, total=1):
 
 def no_hit_response():
     return {"hits": {"total": {"value": 0}, "hits": []}}
+
+
+@pytest.mark.asyncio
+async def test_create_normalized_node_aggregates_descriptions_when_requested():
+    node = NormalizedNode(
+        curie="NCIT:C34373",
+        canonical_identifier="MONDO:0004976",
+        preferred_label="amyotrophic lateral sclerosis",
+        information_content=74.9,
+        identifiers=[
+            {"i": "MONDO:0004976", "l": "amyotrophic lateral sclerosis", "d": ["first description"]},
+            {"i": "NCIT:C34373", "l": "Amyotrophic Lateral Sclerosis", "d": ["second description"]},
+            {"i": "UMLS:C0002736", "l": "Amyotrophic Lateral Sclerosis", "d": ["first description", ""]},
+            {"i": "MESH:D000690", "l": "Amyotrophic Lateral Sclerosis"},
+        ],
+        types=["biolink:Disease"],
+        taxa=[],
+    )
+
+    response = await create_normalized_node(node, include_descriptions=True)
+
+    assert response["id"]["description"] == "first description"
+    assert response["descriptions"] == ["first description", "second description"]
+    assert response["equivalent_identifiers"][0]["description"] == "first description"
+    assert response["equivalent_identifiers"][1]["description"] == "second description"
+
+
+@pytest.mark.asyncio
+async def test_create_normalized_node_hides_descriptions_by_default():
+    node = NormalizedNode(
+        curie="NCIT:C34373",
+        canonical_identifier="MONDO:0004976",
+        preferred_label="amyotrophic lateral sclerosis",
+        information_content=74.9,
+        identifiers=[{"i": "MONDO:0004976", "l": "amyotrophic lateral sclerosis", "d": ["first description"]}],
+        types=["biolink:Disease"],
+        taxa=[],
+    )
+
+    response = await create_normalized_node(node)
+
+    assert "description" not in response["id"]
+    assert "descriptions" not in response
+    assert "description" not in response["equivalent_identifiers"][0]
 
 
 @pytest.mark.asyncio
