@@ -14,8 +14,8 @@
     },
     "elasticsearch": {
         "ES_HOST": "http://elasticsearch.es-core-components.svc.cluster.local:9200",
-        "ES_INDEX": "nodenorm",
-        "ES_ALIAS": "nodenorm", 
+        "ES_INDEX": "annotator-nodenorm",
+        "ES_ALIAS": "annotator-nodenorm", 
         "ES_DOC_TYPE": "node",
         "ES_INDICES": {},
         "ES_ARGS": {
