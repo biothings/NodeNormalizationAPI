@@ -34,11 +34,11 @@ class NodeNormalizationAPINamespace:
 
         opentelemetry_module = "opentelemetry"
         opentelemetry_installed = (
-            opentelemetry_module not in sys.modules and importlib.util.find_spec(opentelemetry_module) is None
+            opentelemetry_module in sys.modules or importlib.util.find_spec(opentelemetry_module) is not None
         )
 
         if not opentelemetry_enabled:
-            logger.debug(
+            logger.info(
                 "OPENTELEMETRY is disabled. If you wish to enable it, set the OPENTELEMETRY_ENABLED value to <True>"
             )
             return False
@@ -51,6 +51,10 @@ class NodeNormalizationAPINamespace:
                 )
             )
             return False
+
+        logger.info(
+            "OPENTELEMETRY is enabled. If you wish to disable it, set the OPENTELEMETRY_ENABLED value to <False>"
+        )
 
         return opentelemetry_enabled and opentelemetry_installed
 
@@ -98,7 +102,7 @@ class NodeNormalizationAPINamespace:
     def configure_telemetry(self):
         """Configure our opentelemetry for our web API."""
         from opentelemetry.instrumentation.tornado import TornadoInstrumentor  # pylint: disable=import-outside-toplevel
-        from opentelemetry.exporter.jaeger.thrift import JaegerExporter  # pylint: disable=import-outside-toplevel
+        from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter  # pylint: disable=import-outside-toplevel
         from opentelemetry.sdk.resources import SERVICE_NAME, Resource  # pylint: disable=import-outside-toplevel
         from opentelemetry.sdk.trace import TracerProvider  # pylint: disable=import-outside-toplevel
         from opentelemetry.sdk.trace.export import BatchSpanProcessor  # pylint: disable=import-outside-toplevel
@@ -106,11 +110,11 @@ class NodeNormalizationAPINamespace:
 
         TornadoInstrumentor().instrument()
 
-        trace_exporter = JaegerExporter(
-            agent_host_name=self.config.telemetry["OPENTELEMETRY_JAEGER_HOST"],
-            agent_port=self.config.telemetry["OPENTELEMETRY_JAEGER_PORT"],
-            udp_split_oversized_batches=True,
-        )
+        jaeger_host = self.config.telemetry["OPENTELEMETRY_JAEGER_HOST"]
+        jaeger_port = self.config.telemetry["OPENTELEMETRY_JAEGER_PORT"]
+        otlp_endpoint = f"{jaeger_host}:{jaeger_port}/v1/traces"
+
+        trace_exporter = OTLPSpanExporter(endpoint=otlp_endpoint)
 
         trace_provider = TracerProvider(
             resource=Resource.create({SERVICE_NAME: self.config.telemetry["OPENTELEMETRY_SERVICE_NAME"]})

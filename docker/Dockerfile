@@ -6,7 +6,7 @@ ARG NODENORM_BRANCH=main
 WORKDIR /build/nodenorm
 RUN git clone -b ${NODENORM_BRANCH} --recursive ${NODENORM_REPO} .
 RUN git rev-parse HEAD > /build/nodenorm/version.txt
-RUN pip wheel --wheel-dir=/build/wheels /build/nodenorm
+RUN pip wheel --wheel-dir=/build/wheels /build/nodenorm[telemetry]
 
 FROM caddy:2.8-builder AS caddy_builder
 RUN xcaddy build
