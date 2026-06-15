@@ -27,6 +27,7 @@
         "OPENTELEMETRY_ENABLED": false,
         "OPENTELEMETRY_SERVICE_NAME": "NodeNorm",
         "OPENTELEMETRY_JAEGER_HOST": "http://localhost",
-        "OPENTELEMETRY_JAEGER_PORT": 4318
+        "OPENTELEMETRY_JAEGER_PORT": 4318,
+        "OPENTELEMETRY_EXCLUDED_URLS": ["^/$", "^/status$", "^/version$", "^/webapp", "^/favicon\\.ico$"]
     }
 }
