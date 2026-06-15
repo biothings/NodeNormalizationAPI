@@ -28,6 +28,6 @@
         "OPENTELEMETRY_SERVICE_NAME": "NodeNorm",
         "OPENTELEMETRY_JAEGER_HOST": "http://jaeger-otel-collector.sri",
         "OPENTELEMETRY_JAEGER_PORT": 4318,
-        "OPENTELEMETRY_EXCLUDED_URLS": ["^/$", "^/status$", "^/webapp", "^/favicon\\.ico$"]
+        "OPENTELEMETRY_EXCLUDED_URLS": ["^/$", "^/status$", "^/version$", "^/webapp", "^/favicon\\.ico$"]
     }
 }
