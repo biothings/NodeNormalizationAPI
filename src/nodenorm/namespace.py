@@ -3,6 +3,7 @@ import importlib.util
 import json
 import logging
 import pathlib
+import re
 import sys
 import types
 
@@ -106,9 +107,58 @@ class NodeNormalizationAPINamespace:
         from opentelemetry.sdk.resources import SERVICE_NAME, Resource  # pylint: disable=import-outside-toplevel
         from opentelemetry.sdk.trace import TracerProvider  # pylint: disable=import-outside-toplevel
         from opentelemetry.sdk.trace.export import BatchSpanProcessor  # pylint: disable=import-outside-toplevel
+        from opentelemetry.sdk.trace.sampling import Sampler, SamplingResult, Decision  # pylint: disable=import-outside-toplevel
         from opentelemetry import trace  # pylint: disable=import-outside-toplevel
 
-        TornadoInstrumentor().instrument()
+        excluded_patterns: list[re.Pattern] = [
+            re.compile(pattern)
+            for pattern in self.config.telemetry.get("OPENTELEMETRY_EXCLUDED_URLS", ["/status", "^/$"])
+        ]
+        # Reference captured here; handlers are populated after telemetry is configured
+        namespace_handlers = self.handlers
+
+        def _build_known_paths() -> set[str]:
+            """Convert handler route patterns to plain path prefixes, computed once."""
+            paths = set()
+            for pattern in namespace_handlers:
+                # Strip regex capture groups e.g. (.*) or ()
+                clean = re.sub(r"\([^)]*\)", "", pattern)
+                # Strip trailing optional-char marker '?'
+                clean = clean.rstrip("?")
+                paths.add(clean or "/")
+            return paths
+
+        class _EndpointFilterSampler(Sampler):
+            """Only samples spans for known endpoints, then applies the exclusion list.
+
+            Known endpoints are derived from the registered handler patterns on first
+            use so no separate configuration is required.
+            """
+
+            def __init__(self):
+                # Lazily populated on first request, after populate_handlers has run
+                self._known_paths: set[str] | None = None
+
+            def should_sample(self, parent_ctx, trace_id, name, kind=None, attributes=None, links=None, trace_state=None):
+                if self._known_paths is None:
+                    self._known_paths = _build_known_paths()
+
+                target: str = (attributes or {}).get("http.target", "")
+                path = target.split("?")[0] if target else ""
+
+                if self._known_paths and not any(
+                    path == ep or (ep.rstrip("/") and path.startswith(ep.rstrip("/") + "/"))
+                    for ep in self._known_paths
+                ):
+                    return SamplingResult(Decision.DROP, attributes=attributes)
+
+                if any(pattern.search(path) for pattern in excluded_patterns):
+                    return SamplingResult(Decision.DROP, attributes=attributes)
+
+                return SamplingResult(Decision.RECORD_AND_SAMPLE, attributes=attributes)
+
+            def get_description(self) -> str:
+                return "EndpointFilterSampler"
 
         jaeger_host = self.config.telemetry["OPENTELEMETRY_JAEGER_HOST"]
         jaeger_port = self.config.telemetry["OPENTELEMETRY_JAEGER_PORT"]
@@ -117,12 +167,15 @@ class NodeNormalizationAPINamespace:
         trace_exporter = OTLPSpanExporter(endpoint=otlp_endpoint)
 
         trace_provider = TracerProvider(
-            resource=Resource.create({SERVICE_NAME: self.config.telemetry["OPENTELEMETRY_SERVICE_NAME"]})
+            resource=Resource.create({SERVICE_NAME: self.config.telemetry["OPENTELEMETRY_SERVICE_NAME"]}),
+            sampler=_EndpointFilterSampler(),
         )
         trace_provider.add_span_processor(BatchSpanProcessor(trace_exporter))
 
-        # Set the trace provider globally
+        # Set the trace provider globally before instrumenting so TornadoInstrumentor
+        # captures a tracer from this provider (and therefore uses the sampler)
         trace.set_tracer_provider(trace_provider)
+        TornadoInstrumentor().instrument()
 
     def load_configuration(self, option_configuration: tornado.options.OptionParser) -> types.SimpleNamespace:
         """Load the json configuration file for our webserver + nodenorm api.
