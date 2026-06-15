@@ -103,6 +103,7 @@ class NodeNormalizationAPINamespace:
     def configure_telemetry(self):
         """Configure our opentelemetry for our web API."""
         from opentelemetry.instrumentation.tornado import TornadoInstrumentor  # pylint: disable=import-outside-toplevel
+        from opentelemetry.instrumentation.elasticsearch import ElasticsearchInstrumentor  # pylint: disable=import-outside-toplevel
         from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter  # pylint: disable=import-outside-toplevel
         from opentelemetry.sdk.resources import SERVICE_NAME, Resource  # pylint: disable=import-outside-toplevel
         from opentelemetry.sdk.trace import TracerProvider  # pylint: disable=import-outside-toplevel
@@ -140,6 +141,17 @@ class NodeNormalizationAPINamespace:
                 self._known_paths: set[str] | None = None
 
             def should_sample(self, parent_ctx, trace_id, name, kind=None, attributes=None, links=None, trace_state=None):
+                # Only apply endpoint filtering to inbound HTTP (SERVER) spans.
+                # All other spans (ES calls, outgoing HTTP, etc.) inherit the parent's
+                # sampling decision so they appear as children of whichever HTTP span
+                # was sampled. This is what enables measuring ES overhead per endpoint.
+                if kind != trace.SpanKind.SERVER:
+                    parent_span_ctx = trace.get_current_span(parent_ctx).get_span_context()
+                    if parent_span_ctx is not None and parent_span_ctx.is_valid:
+                        decision = Decision.RECORD_AND_SAMPLE if parent_span_ctx.trace_flags.sampled else Decision.DROP
+                        return SamplingResult(decision, attributes=attributes, trace_state=trace_state)
+                    return SamplingResult(Decision.DROP, trace_state=trace_state)
+
                 if self._known_paths is None:
                     self._known_paths = _build_known_paths()
 
@@ -150,12 +162,12 @@ class NodeNormalizationAPINamespace:
                     path == ep or (ep.rstrip("/") and path.startswith(ep.rstrip("/") + "/"))
                     for ep in self._known_paths
                 ):
-                    return SamplingResult(Decision.DROP, attributes=attributes)
+                    return SamplingResult(Decision.DROP, trace_state=trace_state)
 
                 if any(pattern.search(path) for pattern in excluded_patterns):
-                    return SamplingResult(Decision.DROP, attributes=attributes)
+                    return SamplingResult(Decision.DROP, trace_state=trace_state)
 
-                return SamplingResult(Decision.RECORD_AND_SAMPLE, attributes=attributes)
+                return SamplingResult(Decision.RECORD_AND_SAMPLE, attributes=attributes, trace_state=trace_state)
 
             def get_description(self) -> str:
                 return "EndpointFilterSampler"
@@ -176,6 +188,7 @@ class NodeNormalizationAPINamespace:
         # captures a tracer from this provider (and therefore uses the sampler)
         trace.set_tracer_provider(trace_provider)
         TornadoInstrumentor().instrument()
+        ElasticsearchInstrumentor().instrument()
 
     def load_configuration(self, option_configuration: tornado.options.OptionParser) -> types.SimpleNamespace:
         """Load the json configuration file for our webserver + nodenorm api.
