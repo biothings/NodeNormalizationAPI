@@ -18,10 +18,11 @@ class NodeNormHealthHandler(NodeNormalizationBaseHandler):
         async_client: AsyncElasticsearch = self.biothings.elasticsearch.async_client
         search_indices = self.biothings.elasticsearch.indices
 
-        biothings_metadata = await async_client.indices.get(search_indices)
-        compendia_url = self.biothings.metadata.biothing_metadata["node"]["src"]["nodenorm"]["url"]
+        mapping_response = await async_client.indices.get_mapping(index=search_indices)
+        index_mapping = next(iter(mapping_response.values()))
+        compendia_url = index_mapping["mappings"]["_meta"]["src"]["nodenorm"]["url"]
         parsed_compendia_url = urlparse(compendia_url)
-        babel_version = parsed_compendia_url.path.split("/")[-2]
+        babel_version = parsed_compendia_url.path.rstrip("/").rsplit("/", maxsplit=1)[-1]
         babel_markdown = f"https://github.com/ncatstranslator/Babel/blob/master/releases/{babel_version}.md"
         try:
             attributes = [
