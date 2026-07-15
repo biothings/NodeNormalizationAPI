@@ -1,9 +1,21 @@
+import importlib.resources
+import json
+from functools import lru_cache
 from urllib.parse import urlparse
 
 from elasticsearch import AsyncElasticsearch
 
+import nodenorm
 from nodenorm.biolink import BIOLINK_MODEL_VERSION
 from nodenorm.handlers.base import NodeNormalizationBaseHandler
+
+
+@lru_cache(maxsize=None)
+def get_openapi_version() -> str:
+    """Read the API version from the openapi.json spec bundled with the webapp."""
+    openapi_path = importlib.resources.files(nodenorm) / "webapp" / "openapi.json"
+    openapi_spec = json.loads(openapi_path.read_text(encoding="utf-8"))
+    return openapi_spec["info"]["version"]
 
 
 class NodeNormHealthHandler(NodeNormalizationBaseHandler):
@@ -24,6 +36,7 @@ class NodeNormHealthHandler(NodeNormalizationBaseHandler):
         parsed_compendia_url = urlparse(compendia_url)
         babel_version = parsed_compendia_url.path.rstrip("/").rsplit("/", maxsplit=1)[-1]
         babel_markdown = f"https://github.com/ncatstranslator/Babel/blob/master/releases/{babel_version}.md"
+        version = get_openapi_version()
         try:
             attributes = [
                 "name",
@@ -46,14 +59,18 @@ class NodeNormHealthHandler(NodeNormalizationBaseHandler):
         except Exception:
             status_response = {
                 "status": "error",
+                "version": version,
                 "babel_version": babel_version,
                 "babel_version_url": babel_markdown,
+                "backend": "elasticsearch",
             }
         else:
             status_response = {
                 "status": "running",
+                "version": version,
                 "babel_version": babel_version,
                 "babel_version_url": babel_markdown,
+                "backend": "elasticsearch",
                 "biolink_model_toolkit_version": BIOLINK_MODEL_VERSION,
                 **nodes,
             }
