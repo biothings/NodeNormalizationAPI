@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Node Normalization",
-    "version": "2.3.26",
+    "version": "1.0.0",
     "x-translator": {
       "component": "Utility",
       "team": [
