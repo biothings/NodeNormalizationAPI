@@ -1,6 +1,6 @@
 from urllib.parse import urlparse
 
-BABEL_RELEASES_URL = "https://github.com/NCATSTranslator/Babel/releases/tag"
+BABEL_RELEASES_URL = "https://github.com/NCATSTranslator/Babel/blob/main/releases"
 
 
 def get_babel_version(index_mapping: dict) -> str:
@@ -13,3 +13,9 @@ def get_babel_version(index_mapping: dict) -> str:
     compendia_url = source_metadata["url"]
     parsed_compendia_url = urlparse(compendia_url)
     return parsed_compendia_url.path.rstrip("/").rsplit("/", maxsplit=1)[-1]
+
+
+def get_babel_release_url(version: str) -> str:
+    """Return the canonical Babel release-notes URL for a build version."""
+
+    return f"{BABEL_RELEASES_URL}/{version}/README.md"

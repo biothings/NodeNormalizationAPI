@@ -5,7 +5,7 @@ from functools import lru_cache
 from elasticsearch import AsyncElasticsearch
 
 import nodenorm
-from nodenorm.babel import BABEL_RELEASES_URL, get_babel_version
+from nodenorm.babel import get_babel_release_url, get_babel_version
 from nodenorm.biolink import BIOLINK_MODEL_VERSION
 from nodenorm.handlers.base import NodeNormalizationBaseHandler
 
@@ -33,7 +33,7 @@ class NodeNormHealthHandler(NodeNormalizationBaseHandler):
         mapping_response = await async_client.indices.get_mapping(index=search_indices)
         index_mapping = next(iter(mapping_response.values()))
         babel_version = get_babel_version(index_mapping)
-        babel_version_url = f"{BABEL_RELEASES_URL}/{babel_version}"
+        babel_version_url = get_babel_release_url(babel_version)
         version = get_openapi_version()
         try:
             attributes = [
