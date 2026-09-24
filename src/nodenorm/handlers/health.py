@@ -1,11 +1,11 @@
 import importlib.resources
 import json
 from functools import lru_cache
-from urllib.parse import urlparse
 
 from elasticsearch import AsyncElasticsearch
 
 import nodenorm
+from nodenorm.babel import get_babel_release_url, get_babel_version
 from nodenorm.biolink import BIOLINK_MODEL_VERSION
 from nodenorm.handlers.base import NodeNormalizationBaseHandler
 
@@ -32,10 +32,8 @@ class NodeNormHealthHandler(NodeNormalizationBaseHandler):
 
         mapping_response = await async_client.indices.get_mapping(index=search_indices)
         index_mapping = next(iter(mapping_response.values()))
-        compendia_url = index_mapping["mappings"]["_meta"]["src"]["nodenorm"]["url"]
-        parsed_compendia_url = urlparse(compendia_url)
-        babel_version = parsed_compendia_url.path.rstrip("/").rsplit("/", maxsplit=1)[-1]
-        babel_markdown = f"https://github.com/ncatstranslator/Babel/blob/master/releases/{babel_version}.md"
+        babel_version = get_babel_version(index_mapping)
+        babel_version_url = get_babel_release_url(babel_version)
         version = get_openapi_version()
         try:
             attributes = [
@@ -61,7 +59,7 @@ class NodeNormHealthHandler(NodeNormalizationBaseHandler):
                 "status": "error",
                 "version": version,
                 "babel_version": babel_version,
-                "babel_version_url": babel_markdown,
+                "babel_version_url": babel_version_url,
                 "backend": "elasticsearch",
             }
         else:
@@ -69,7 +67,7 @@ class NodeNormHealthHandler(NodeNormalizationBaseHandler):
                 "status": "running",
                 "version": version,
                 "babel_version": babel_version,
-                "babel_version_url": babel_markdown,
+                "babel_version_url": babel_version_url,
                 "backend": "elasticsearch",
                 "biolink_model_toolkit_version": BIOLINK_MODEL_VERSION,
                 **nodes,
