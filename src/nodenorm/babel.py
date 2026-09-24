@@ -1,6 +1,6 @@
 from urllib.parse import urlparse
 
-BABEL_RELEASES_URL = "https://github.com/NCATSTranslator/Babel/tree/main/releases"
+BABEL_RELEASES_URL = "https://github.com/NCATSTranslator/Babel/releases/tag"
 
 
 def get_babel_version(index_mapping: dict) -> str:

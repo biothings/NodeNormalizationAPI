@@ -25,7 +25,7 @@ def test_babel_version_uses_explicit_source_version():
 
     assert babel_version == "2026jul22"
     assert f"{BABEL_RELEASES_URL}/{babel_version}" == (
-        "https://github.com/NCATSTranslator/Babel/tree/main/releases/2026jul22"
+        "https://github.com/NCATSTranslator/Babel/releases/tag/2026jul22"
     )
 
 
@@ -36,4 +36,9 @@ def test_babel_version_falls_back_to_legacy_source_url():
         }
     )
 
-    assert get_babel_version(mapping) == "2025sep1"
+    babel_version = get_babel_version(mapping)
+
+    assert babel_version == "2025sep1"
+    assert f"{BABEL_RELEASES_URL}/{babel_version}" == (
+        "https://github.com/NCATSTranslator/Babel/releases/tag/2025sep1"
+    )
