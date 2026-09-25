@@ -57,12 +57,13 @@ tests = [
 ]
 
 telemetry = [
-    "opentelemetry-api>=1.42.1",
-    "opentelemetry-sdk>=1.42.1",
-    "opentelemetry-exporter-otlp-proto-http>=1.42.1",
-    "opentelemetry-instrumentation>=0.63b1",
-    "opentelemetry-instrumentation-tornado>=0.63b1",
-    "opentelemetry-instrumentation-elasticsearch>=0.63b1",
+    # OpenTelemetry core and instrumentation releases must stay aligned.
+    "opentelemetry-api==1.43.0",
+    "opentelemetry-sdk==1.43.0",
+    "opentelemetry-exporter-otlp-proto-http==1.43.0",
+    "opentelemetry-instrumentation==0.64b0",
+    "opentelemetry-instrumentation-tornado==0.64b0",
+    "opentelemetry-instrumentation-elasticsearch==0.64b0",
     "deprecated>=1.3.1"
 ]
 
