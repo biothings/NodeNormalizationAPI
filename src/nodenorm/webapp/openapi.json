@@ -2,3184 +2,42 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Node Normalization",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "x-translator": {
       "component": "Utility",
       "team": [
-        "Standards Reference Implementation Team"
+        "DOGSURF"
       ],
       "infores": "infores:sri-node-normalizer"
     },
-    "x-trapi": {
-      "version": "1.5.0",
-      "operations": [
-        "annotate_nodes"
-      ]
-    },
     "contact": {
-      "email": "bizon@renci.org",
-      "name": "Chris Bizon",
-      "x-id": "https://github.com/cbizon",
+      "email": "shuchenliu2014@gmail.com",
+      "name": "Will Liu",
+      "x-id": "https://github.com/shuchenliu",
       "x-role": "responsible developer"
     },
     "termsOfService": "https://toss.apps.renci.org/tos?service_long=Node+Normalization&provider_long=the+Translator+Consortium",
-    "description": "Node Normalization takes a CURIE, and returns: <ol> <li>The preferred CURIE for this entity <li>All other known equivalent identifiers for the entity <li>Semantic types for the entity as defined by the <a href=\"https://biolink.github.io/biolink-model/\">BioLink Model</a> </ol> The data served by Node Normalization is created by <a href=\"https://github.com/TranslatorSRI/Babel\">Babel</a>, which attempts to find identifier equivalences, and makes sure that CURIE prefixes are BioLink Model Compliant.  To determine whether Node Normalization is likely to be useful, check /get_semantic_types, which lists the BioLink semantic types for which normalization has been attempted, and /get_curie_prefixes, which lists the number of times each prefix is used for a semantic type."
+    "description": "Node Normalization takes a CURIE, and returns: <ol> <li>The preferred CURIE for this entity <li>All other known equivalent identifiers for the entity <li>Semantic types for the entity as defined by the <a href=\"https://biolink.github.io/biolink-model/\">Biolink Model</a> </ol> This is the Elasticsearch-backed implementation of the Node Normalization API, maintained by the <a href=\"https://biothings.io\">BioThings</a> group at Scripps Research (<a href=\"https://github.com/biothings/NodeNormalizationAPI\">source code</a>). The data it serves is created by <a href=\"https://github.com/NCATSTranslator/Babel\">Babel</a>, which finds identifier equivalences and makes sure that CURIE prefixes are Biolink Model compliant. To determine whether Node Normalization is likely to be useful, check /get_semantic_types, which lists the Biolink semantic types for which normalization has been attempted. The semantics of each endpoint are described in the <a href=\"https://github.com/NCATSTranslator/NodeNormalization/blob/main/documentation/API.md\">Node Normalization API documentation</a>. To learn more about how Babel creates cliques of equivalent identifiers, <a href=\"https://github.com/NCATSTranslator/Babel/blob/main/docs/README.md\">read its documentation</a>."
   },
-  "paths": {
-    "/status": {
-      "get": {
-        "summary": "Status information on this NodeNorm instance",
-        "tags": ["health"],
-        "description": "Returns information about this NodeNorm instance and the elasticsearch instance backing it.",
-        "operationId": "status",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "title": "Response Status Get"
-                }
-              }
-            }
-          }
-        }
-      }
+  "servers": [
+    {
+      "description": "Continuous integration",
+      "url": "https://nodenorm-es.ci.transltr.io/",
+      "x-maturity": "staging",
+      "x-location": "ITRB"
     },
-    "/get_normalized_nodes": {
-      "get": {
-        "summary": "Get the equivalent identifiers and semantic types for the curie(s) entered.",
-        "tags": ["translator"],
-        "description": "Returns the equivalent identifiers and semantic types for the curie(s)",
-        "operationId": "get_normalized_node_handler_get_normalized_nodes_get",
-        "parameters": [
-          {
-            "description": "List of curies to normalize",
-            "required": false,
-            "schema": {
-              "items": {
-                "type": "string"
-              },
-              "type": "array",
-              "minItems": 1,
-              "title": "Curie",
-              "description": "List of curies to normalize",
-              "default": []
-            },
-            "example": [
-              "MESH:D014867",
-              "NCIT:C34373"
-            ],
-            "name": "curie",
-            "in": "query"
-          },
-          {
-            "description": "Whether to apply gene/protein conflation",
-            "required": false,
-            "schema": {
-              "type": "boolean",
-              "title": "Conflate",
-              "description": "Whether to apply gene/protein conflation",
-              "default": true
-            },
-            "name": "conflate",
-            "in": "query"
-          },
-          {
-            "description": "Whether to apply drug/chemical conflation",
-            "required": false,
-            "schema": {
-              "type": "boolean",
-              "title": "Drug Chemical Conflate",
-              "description": "Whether to apply drug/chemical conflation",
-              "default": false
-            },
-            "name": "drug_chemical_conflate",
-            "in": "query"
-          },
-          {
-            "description": "Whether to return curie descriptions when possible",
-            "required": false,
-            "schema": {
-              "type": "boolean",
-              "title": "Description",
-              "description": "Whether to return curie descriptions when possible",
-              "default": false
-            },
-            "name": "description",
-            "in": "query"
-          },
-          {
-            "description": "Whether to return individual types for equivalent identifiers",
-            "required": false,
-            "schema": {
-              "type": "boolean",
-              "title": "Individual Types",
-              "description": "Whether to return individual types for equivalent identifiers",
-              "default": false
-            },
-            "name": "individual_types",
-            "in": "query"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "summary": "Get the equivalent identifiers and semantic types for the curie(s) entered.",
-        "tags": ["translator"],
-        "description": "Returns the equivalent identifiers and semantic types for the curie(s). Use the `conflate` flag to choose whether to apply conflation.",
-        "operationId": "get_normalized_node_handler_post_get_normalized_nodes_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CurieList"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
+    {
+      "description": "Test",
+      "url": "https://nodenorm-es.test.transltr.io/",
+      "x-maturity": "testing",
+      "x-location": "ITRB"
     },
-    "/get_setid": {
-      "get": {
-        "summary": "Normalize and deduplicate a set of identifiers and return a single hash that represents this set.",
-        "tags": ["translator"],
-        "operationId": "get_setid_get_setid_get",
-        "parameters": [
-          {
-            "description": "Set of curies to normalize",
-            "required": false,
-            "schema": {
-              "items": {
-                "type": "string"
-              },
-              "type": "array",
-              "minItems": 1,
-              "title": "Curie",
-              "description": "Set of curies to normalize",
-              "default": []
-            },
-            "example": [
-              "MESH:D014867",
-              "NCIT:C34373",
-              "UNII:63M8RYN44N",
-              "RUBBISH:1234"
-            ],
-            "name": "curie",
-            "in": "query"
-          },
-          {
-            "description": "Set of conflations to apply",
-            "required": false,
-            "schema": {
-              "items": {
-                "type": "string"
-              },
-              "type": "array",
-              "title": "Conflation",
-              "description": "Set of conflations to apply",
-              "default": []
-            },
-            "example": [
-              "GeneProtein",
-              "DrugChemical"
-            ],
-            "name": "conflation",
-            "in": "query"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SetIDResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "summary": "Normalize and deduplicate a set of identifiers and return a single hash that represents this set.",
-        "tags": ["translator"],
-        "operationId": "get_setid_get_setid_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "items": {
-                  "$ref": "#/components/schemas/SetIDQuery"
-                },
-                "type": "array",
-                "title": "Sets",
-                "description": "Set of identifiers to normalize",
-                "default": []
-              },
-              "example": [
-                {
-                  "curies": [
-                    "MESH:D014867",
-                    "NCIT:C34373"
-                  ]
-                },
-                {
-                  "curies": [
-                    "NCIT:C34373",
-                    "MESH:D014867",
-                    "UNII:63M8RYN44N",
-                    "RUBBISH:1234"
-                  ],
-                  "conflations": [
-                    "GeneProtein",
-                    "DrugChemical"
-                  ]
-                }
-              ]
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/SetIDResponse"
-                  },
-                  "type": "array",
-                  "title": "Response Get Setid Get Setid Post"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/get_semantic_types": {
-      "get": {
-        "summary": "Return a list of BioLink semantic types for which normalization has been attempted.",
-        "tags": ["metadata"],
-        "description": "Returns a distinct set of the semantic types discovered in the compendium data.",
-        "operationId": "get_semantic_types_handler_get_semantic_types_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SemanticTypes"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/get_allowed_conflations": {
-      "get": {
-        "tags": ["metadata"],
-        "description": "Returns a list of allowed conflation options",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "example": {
-                    "conflations": [
-                      "GeneProtein",
-                      "DrugChemical"
-                    ],
-                    "type": "object",
-                    "description": "Results",
-                    "summary": "Return a list of named conflations.",
-                    "tags": [
-                      "Interfaces"
-                    ]
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
+    {
+      "description": "Localhost",
+      "url": "http://localhost:8000/",
+      "x-maturity": "development"
     }
-  },
-  "components": {
-    "schemas": {
-      "AboveOrBelowEnum": {
-        "type": "string",
-        "enum": [
-          "above",
-          "below"
-        ],
-        "title": "AboveOrBelowEnum",
-        "description": "'above' or 'below'."
-      },
-      "Analysis": {
-        "properties": {
-          "resource_id": {
-            "type": "string",
-            "title": "resource infores"
-          },
-          "edge_bindings": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/HashableMapping_str__HashableSet_EdgeBinding__"
-              }
-            ],
-            "title": "list of edge bindings"
-          },
-          "score": {
-            "type": "number",
-            "format": "float",
-            "title": "Score"
-          },
-          "support_graphs": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/HashableSet_str_"
-              }
-            ],
-            "title": "Support Graphs",
-            "nullable": true
-          },
-          "scoring_method": {
-            "type": "string",
-            "title": "Scoring Method",
-            "nullable": true
-          },
-          "attributes": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/HashableSet_Attribute_"
-              }
-            ],
-            "title": "Attributes",
-            "nullable": true
-          }
-        },
-        "type": "object",
-        "required": [
-          "resource_id",
-          "edge_bindings"
-        ],
-        "title": "analysis",
-        "description": "Analysis."
-      },
-      "AnnotateEdgesParameters": {
-        "properties": {
-          "attributes": {
-            "$ref": "#/components/schemas/HashableSequence_str_"
-          }
-        },
-        "type": "object",
-        "title": "AnnotateEdgesParameters",
-        "description": "Custom base model for all classes\n\nThis provides hash and equality methods."
-      },
-      "AnnotateNodesParameters": {
-        "properties": {
-          "attributes": {
-            "$ref": "#/components/schemas/HashableSequence_str_"
-          }
-        },
-        "type": "object",
-        "title": "AnnotateNodesParameters",
-        "description": "Custom base model for all classes\n\nThis provides hash and equality methods."
-      },
-      "AscOrDescEnum": {
-        "type": "string",
-        "enum": [
-          "ascending",
-          "descending"
-        ],
-        "title": "AscOrDescEnum",
-        "description": "'ascending' or 'descending'."
-      },
-      "AsyncQuery": {
-        "properties": {
-          "callback": {
-            "type": "string",
-            "pattern": "^https?://",
-            "format": "uri",
-            "title": "Callback"
-          },
-          "message": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/Message"
-              }
-            ],
-            "title": "message"
-          },
-          "log_level": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/LogLevel"
-              }
-            ],
-            "title": "log_level",
-            "nullable": true
-          },
-          "workflow": {
-            "$ref": "#/components/schemas/Workflow"
-          }
-        },
-        "type": "object",
-        "required": [
-          "callback",
-          "message"
-        ],
-        "title": "query",
-        "description": "AsyncQuery.",
-        "x-body-name": "request_body"
-      },
-      "Attribute": {
-        "properties": {
-          "attribute_type_id": {
-            "type": "string",
-            "title": "type"
-          },
-          "value": {
-            "title": "value"
-          },
-          "value_type_id": {
-            "type": "string",
-            "title": "value_type_id",
-            "nullable": true
-          },
-          "original_attribute_name": {
-            "type": "string",
-            "title": "Original Attribute Name",
-            "nullable": true
-          },
-          "value_url": {
-            "type": "string",
-            "title": "Value Url",
-            "nullable": true
-          },
-          "attribute_source": {
-            "type": "string",
-            "title": "Attribute Source",
-            "nullable": true
-          },
-          "description": {
-            "type": "string",
-            "title": "Description",
-            "nullable": true
-          },
-          "attributes": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/HashableSequence_SubAttribute_"
-              }
-            ],
-            "title": "Attributes",
-            "nullable": true
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "attribute_type_id",
-          "value"
-        ],
-        "title": "Attribute",
-        "description": "Node/edge attribute."
-      },
-      "AttributeConstraint": {
-        "properties": {
-          "name": {
-            "type": "string",
-            "title": "name",
-            "nullable": false
-          },
-          "id": {
-            "type": "string",
-            "title": "id",
-            "nullable": false
-          },
-          "not": {
-            "type": "boolean",
-            "title": "not",
-            "default": false
-          },
-          "operator": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/Operator"
-              }
-            ],
-            "title": "operator"
-          },
-          "value": {
-            "title": "value"
-          },
-          "unit_id": {
-            "title": "unit_id"
-          },
-          "unit_name": {
-            "title": "unit_name"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "name",
-          "id",
-          "operator",
-          "value"
-        ],
-        "title": "AttributeConstraint",
-        "description": "QNode or QEdge attribute constraint."
-      },
-      "AuxiliaryGraph": {
-        "properties": {
-          "edges": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/HashableSet_str_"
-              }
-            ],
-            "title": "edges in auxiliary graph"
-          },
-          "attributes": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/HashableSet_Attribute_"
-              }
-            ],
-            "title": "Attributes",
-            "nullable": true
-          }
-        },
-        "type": "object",
-        "required": [
-          "edges"
-        ],
-        "title": "auxiliary graph",
-        "description": "Auxiliary Graph"
-      },
-      "AuxiliaryGraphs": {
-        "$ref": "#/components/schemas/HashableMapping_str__AuxiliaryGraph_",
-        "title": "auxiliary graphs",
-        "description": "Auxiliary Graphs"
-      },
-      "ConflationList": {
-        "properties": {
-          "conflations": {
-            "items": {},
-            "type": "array",
-            "title": "Conflations"
-          }
-        },
-        "type": "object",
-        "required": [
-          "conflations"
-        ],
-        "title": "ConflationList"
-      },
-      "CurieList": {
-        "properties": {
-          "curies": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "minItems": 1,
-            "title": "List of CURIEs to normalize"
-          },
-          "conflate": {
-            "type": "boolean",
-            "title": "Whether to apply gene/protein conflation",
-            "default": true
-          },
-          "description": {
-            "type": "boolean",
-            "title": "Whether to return CURIE descriptions when possible",
-            "default": false
-          },
-          "drug_chemical_conflate": {
-            "type": "boolean",
-            "title": "Whether to apply drug/chemical conflation",
-            "default": false
-          },
-          "individual_types": {
-            "type": "boolean",
-            "title": "Whether to return individual types for equivalent identifiers",
-            "default": false
-          }
-        },
-        "type": "object",
-        "required": [
-          "curies"
-        ],
-        "title": "CurieList",
-        "description": "Curie list input model",
-        "example": {
-          "curies": [
-            "MESH:D014867",
-            "NCIT:C34373"
-          ],
-          "conflate": true,
-          "description": false,
-          "drug_chemical_conflate": false
-        }
-      },
-      "CuriePivot": {
-        "properties": {
-          "curie_prefix": {
-            "additionalProperties": {
-              "type": "string"
-            },
-            "type": "object",
-            "title": "Curie Prefix"
-          }
-        },
-        "type": "object",
-        "required": [
-          "curie_prefix"
-        ],
-        "title": "CuriePivot"
-      },
-      "Edge": {
-        "properties": {
-          "subject": {
-            "type": "string",
-            "title": "subject node id"
-          },
-          "object": {
-            "type": "string",
-            "title": "object node id"
-          },
-          "predicate": {
-            "type": "string",
-            "pattern": "^biolink:[a-z][a-z_]*$",
-            "title": "edge predicate"
-          },
-          "sources": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/HashableSet_RetrievalSource_"
-              }
-            ],
-            "title": "list of source retrievals"
-          },
-          "qualifiers": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/HashableSet_Qualifier_"
-              }
-            ],
-            "title": "Qualifiers",
-            "nullable": true
-          },
-          "attributes": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/HashableSet_Attribute_"
-              }
-            ],
-            "title": "Attributes",
-            "nullable": true
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "subject",
-          "object",
-          "predicate",
-          "sources"
-        ],
-        "title": "knowledge-graph edge",
-        "description": "Knowledge graph edge."
-      },
-      "EdgeBinding": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "title": "knowledge graph id"
-          },
-          "attributes": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/HashableSet_Attribute_"
-              }
-            ],
-            "title": "Attributes",
-            "nullable": true
-          }
-        },
-        "type": "object",
-        "required": [
-          "id"
-        ],
-        "title": "edge binding",
-        "description": "Edge binding.",
-        "example": {
-          "id": "string"
-        }
-      },
-      "EnrichResultsParameters": {
-        "properties": {
-          "pvalue_threshold": {
-            "type": "number",
-            "maximum": 1.0,
-            "minimum": 0.0,
-            "title": "Pvalue Threshold",
-            "default": 0.000001
-          },
-          "qnode_keys": {
-            "$ref": "#/components/schemas/HashableSequence_str_"
-          },
-          "predicates_to_exclude": {
-            "$ref": "#/components/schemas/HashableSequence_BiolinkPredicate_"
-          }
-        },
-        "type": "object",
-        "title": "EnrichResultsParameters",
-        "description": "Custom base model for all classes\n\nThis provides hash and equality methods."
-      },
-      "FillAllowParameters": {
-        "properties": {
-          "allowlist": {
-            "$ref": "#/components/schemas/HashableSequence_str_"
-          },
-          "qedge_keys": {
-            "$ref": "#/components/schemas/HashableSequence_str_"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "title": "FillAllowParameters",
-        "description": "Custom base model for all classes\n\nThis provides hash and equality methods."
-      },
-      "FillDenyParameters": {
-        "properties": {
-          "denylist": {
-            "$ref": "#/components/schemas/HashableSequence_str_"
-          },
-          "qedge_keys": {
-            "$ref": "#/components/schemas/HashableSequence_str_"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "title": "FillDenyParameters",
-        "description": "Custom base model for all classes\n\nThis provides hash and equality methods."
-      },
-      "FillParameters": {
-        "anyOf": [
-          {
-            "$ref": "#/components/schemas/FillAllowParameters"
-          },
-          {
-            "$ref": "#/components/schemas/FillDenyParameters"
-          }
-        ],
-        "title": "FillParameters",
-        "description": "Custom base model for all classes\n\nThis provides hash and equality methods."
-      },
-      "FilterKgraphContinuousKedgeAttributeParameters": {
-        "properties": {
-          "edge_attribute": {
-            "type": "string",
-            "title": "Edge Attribute"
-          },
-          "threshold": {
-            "type": "number",
-            "title": "Threshold"
-          },
-          "remove_above_or_below": {
-            "$ref": "#/components/schemas/AboveOrBelowEnum"
-          },
-          "qedge_keys": {
-            "$ref": "#/components/schemas/HashableSequence_str_"
-          },
-          "qnode_keys": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/HashableSequence_str_"
-              }
-            ],
-            "title": "Qnode Keys",
-            "default": []
-          }
-        },
-        "type": "object",
-        "required": [
-          "edge_attribute",
-          "threshold",
-          "remove_above_or_below"
-        ],
-        "title": "FilterKgraphContinuousKedgeAttributeParameters",
-        "description": "Custom base model for all classes\n\nThis provides hash and equality methods."
-      },
-      "FilterKgraphDiscreteKedgeAttributeParameters": {
-        "properties": {
-          "edge_attribute": {
-            "type": "string",
-            "title": "Edge Attribute"
-          },
-          "remove_value": {
-            "title": "Remove Value"
-          },
-          "qedge_keys": {
-            "$ref": "#/components/schemas/HashableSequence_str_"
-          },
-          "qnode_keys": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/HashableSequence_str_"
-              }
-            ],
-            "title": "Qnode Keys",
-            "default": []
-          }
-        },
-        "type": "object",
-        "required": [
-          "edge_attribute"
-        ],
-        "title": "FilterKgraphDiscreteKedgeAttributeParameters",
-        "description": "Custom base model for all classes\n\nThis provides hash and equality methods."
-      },
-      "FilterKgraphDiscreteKnodeAttributeParameters": {
-        "properties": {
-          "node_attribute": {
-            "type": "string",
-            "title": "Node Attribute"
-          },
-          "remove_value": {
-            "title": "Remove Value"
-          },
-          "qnode_keys": {
-            "$ref": "#/components/schemas/HashableSequence_str_"
-          }
-        },
-        "type": "object",
-        "required": [
-          "node_attribute"
-        ],
-        "title": "FilterKgraphDiscreteKnodeAttributeParameters",
-        "description": "Custom base model for all classes\n\nThis provides hash and equality methods."
-      },
-      "FilterKgraphPercentileParameters": {
-        "properties": {
-          "edge_attribute": {
-            "type": "string",
-            "title": "Edge Attribute"
-          },
-          "threshold": {
-            "type": "number",
-            "maximum": 100.0,
-            "minimum": 0.0,
-            "title": "Threshold",
-            "default": 95
-          },
-          "remove_above_or_below": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/AboveOrBelowEnum"
-              }
-            ],
-            "default": "below"
-          },
-          "qedge_keys": {
-            "$ref": "#/components/schemas/HashableSequence_str_"
-          },
-          "qnode_keys": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/HashableSequence_str_"
-              }
-            ],
-            "title": "Qnode Keys",
-            "default": []
-          }
-        },
-        "type": "object",
-        "required": [
-          "edge_attribute"
-        ],
-        "title": "FilterKgraphPercentileParameters",
-        "description": "Custom base model for all classes\n\nThis provides hash and equality methods."
-      },
-      "FilterKgraphStdDevParameters": {
-        "properties": {
-          "edge_attribute": {
-            "type": "string",
-            "title": "Edge Attribute"
-          },
-          "plus_or_minus_std_dev": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/PlusOrMinusEnum"
-              }
-            ],
-            "default": "plus"
-          },
-          "num_sigma": {
-            "type": "number",
-            "minimum": 0.0,
-            "title": "Num Sigma",
-            "default": 1
-          },
-          "remove_above_or_below": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/AboveOrBelowEnum"
-              }
-            ],
-            "default": "below"
-          },
-          "qedge_keys": {
-            "$ref": "#/components/schemas/HashableSequence_str_"
-          },
-          "qnode_keys": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/HashableSequence_str_"
-              }
-            ],
-            "title": "Qnode Keys",
-            "default": []
-          }
-        },
-        "type": "object",
-        "required": [
-          "edge_attribute"
-        ],
-        "title": "FilterKgraphStdDevParameters",
-        "description": "Custom base model for all classes\n\nThis provides hash and equality methods."
-      },
-      "FilterKgraphTopNParameters": {
-        "properties": {
-          "edge_attribute": {
-            "type": "string",
-            "title": "Edge Attribute"
-          },
-          "max_edges": {
-            "type": "integer",
-            "maximum": 0.0,
-            "title": "Max Edges",
-            "default": 50
-          },
-          "remove_top_or_bottom": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/TopOrBottomEnum"
-              }
-            ],
-            "default": "top"
-          },
-          "qedge_keys": {
-            "$ref": "#/components/schemas/HashableSequence_str_"
-          },
-          "qnode_keys": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/HashableSequence_str_"
-              }
-            ],
-            "title": "Qnode Keys",
-            "default": []
-          }
-        },
-        "type": "object",
-        "required": [
-          "edge_attribute"
-        ],
-        "title": "FilterKgraphTopNParameters",
-        "description": "Custom base model for all classes\n\nThis provides hash and equality methods."
-      },
-      "FilterResultsTopNParameters": {
-        "properties": {
-          "max_results": {
-            "type": "integer",
-            "minimum": 0.0,
-            "title": "Max Results"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "max_results"
-        ],
-        "title": "FilterResultsTopNParameters",
-        "description": "Custom base model for all classes\n\nThis provides hash and equality methods."
-      },
-      "HTTPValidationError": {
-        "properties": {
-          "detail": {
-            "items": {
-              "$ref": "#/components/schemas/ValidationError"
-            },
-            "type": "array",
-            "title": "Detail"
-          }
-        },
-        "type": "object",
-        "title": "HTTPValidationError"
-      },
-      "HashableMapping_CURIE__Node_": {
-        "additionalProperties": {
-          "$ref": "#/components/schemas/Node"
-        },
-        "type": "object",
-        "title": "HashableMapping[CURIE, Node]",
-        "description": "Custom class that implements MutableMapping and is hashable",
-        "default": {}
-      },
-      "HashableMapping_EdgeIdentifier__Edge_": {
-        "additionalProperties": {
-          "$ref": "#/components/schemas/Edge"
-        },
-        "type": "object",
-        "title": "HashableMapping[EdgeIdentifier, Edge]",
-        "description": "Custom class that implements MutableMapping and is hashable",
-        "default": {}
-      },
-      "HashableMapping_str__AuxiliaryGraph_": {
-        "additionalProperties": {
-          "$ref": "#/components/schemas/AuxiliaryGraph"
-        },
-        "type": "object",
-        "title": "HashableMapping[str, AuxiliaryGraph]",
-        "description": "Custom class that implements MutableMapping and is hashable",
-        "default": {}
-      },
-      "HashableMapping_str__HashableSet_EdgeBinding__": {
-        "additionalProperties": {
-          "$ref": "#/components/schemas/HashableSet_EdgeBinding_"
-        },
-        "type": "object",
-        "title": "HashableMapping[str, HashableSet[EdgeBinding]]",
-        "description": "Custom class that implements MutableMapping and is hashable",
-        "default": {}
-      },
-      "HashableMapping_str__HashableSet_NodeBinding__": {
-        "additionalProperties": {
-          "$ref": "#/components/schemas/HashableSet_NodeBinding_"
-        },
-        "type": "object",
-        "title": "HashableMapping[str, HashableSet[NodeBinding]]",
-        "description": "Custom class that implements MutableMapping and is hashable",
-        "default": {}
-      },
-      "HashableMapping_str__QEdge_": {
-        "additionalProperties": {
-          "$ref": "#/components/schemas/QEdge"
-        },
-        "type": "object",
-        "title": "HashableMapping[str, QEdge]",
-        "description": "Custom class that implements MutableMapping and is hashable",
-        "default": {}
-      },
-      "HashableMapping_str__QNode_": {
-        "additionalProperties": {
-          "$ref": "#/components/schemas/QNode"
-        },
-        "type": "object",
-        "title": "HashableMapping[str, QNode]",
-        "description": "Custom class that implements MutableMapping and is hashable",
-        "default": {}
-      },
-      "HashableSequence_AttributeConstraint_": {
-        "items": {
-          "$ref": "#/components/schemas/AttributeConstraint"
-        },
-        "type": "array",
-        "title": "HashableSequence[AttributeConstraint]",
-        "description": "Custom class that implements MutableSequence and is hashable",
-        "default": []
-      },
-      "HashableSequence_BiolinkEntity_": {
-        "items": {
-          "type": "string",
-          "pattern": "^biolink:[A-Z][a-zA-Z]*$"
-        },
-        "type": "array",
-        "title": "HashableSequence[BiolinkEntity]",
-        "description": "Custom class that implements MutableSequence and is hashable",
-        "default": []
-      },
-      "HashableSequence_BiolinkPredicate_": {
-        "items": {
-          "type": "string",
-          "pattern": "^biolink:[a-z][a-z_]*$"
-        },
-        "type": "array",
-        "title": "HashableSequence[BiolinkPredicate]",
-        "description": "Custom class that implements MutableSequence and is hashable",
-        "default": []
-      },
-      "HashableSequence_CURIE_": {
-        "items": {
-          "type": "string"
-        },
-        "type": "array",
-        "title": "HashableSequence[CURIE]",
-        "description": "Custom class that implements MutableSequence and is hashable",
-        "default": []
-      },
-      "HashableSequence_Operation_": {
-        "items": {
-          "$ref": "#/components/schemas/Operation"
-        },
-        "type": "array",
-        "title": "HashableSequence[Operation]",
-        "description": "Custom class that implements MutableSequence and is hashable",
-        "default": []
-      },
-      "HashableSequence_QualifierConstraint_": {
-        "items": {
-          "$ref": "#/components/schemas/QualifierConstraint"
-        },
-        "type": "array",
-        "title": "HashableSequence[QualifierConstraint]",
-        "description": "Custom class that implements MutableSequence and is hashable",
-        "default": []
-      },
-      "HashableSequence_Qualifier_": {
-        "items": {
-          "$ref": "#/components/schemas/Qualifier"
-        },
-        "type": "array",
-        "title": "HashableSequence[Qualifier]",
-        "description": "Custom class that implements MutableSequence and is hashable",
-        "default": []
-      },
-      "HashableSequence_RecursiveAttribute_": {
-        "items": {
-          "$ref": "#/components/schemas/RecursiveAttribute"
-        },
-        "type": "array",
-        "title": "HashableSequence[RecursiveAttribute]",
-        "description": "Custom class that implements MutableSequence and is hashable",
-        "default": []
-      },
-      "HashableSequence_Result_": {
-        "items": {
-          "$ref": "#/components/schemas/Result"
-        },
-        "type": "array",
-        "title": "HashableSequence[Result]",
-        "description": "Custom class that implements MutableSequence and is hashable",
-        "default": []
-      },
-      "HashableSequence_SubAttribute_": {
-        "items": {
-          "$ref": "#/components/schemas/SubAttribute"
-        },
-        "type": "array",
-        "title": "HashableSequence[SubAttribute]",
-        "description": "Custom class that implements MutableSequence and is hashable",
-        "default": []
-      },
-      "HashableSequence_str_": {
-        "items": {
-          "type": "string"
-        },
-        "type": "array",
-        "title": "HashableSequence[str]",
-        "description": "Custom class that implements MutableSequence and is hashable",
-        "default": []
-      },
-      "HashableSet_Analysis_": {
-        "items": {
-          "$ref": "#/components/schemas/Analysis"
-        },
-        "type": "array",
-        "uniqueItems": true,
-        "title": "HashableSet[Analysis]",
-        "description": "Custom class that implements MutableSet and is hashable",
-        "default": []
-      },
-      "HashableSet_Attribute_": {
-        "items": {
-          "$ref": "#/components/schemas/Attribute"
-        },
-        "type": "array",
-        "uniqueItems": true,
-        "title": "HashableSet[Attribute]",
-        "description": "Custom class that implements MutableSet and is hashable",
-        "default": []
-      },
-      "HashableSet_BiolinkEntity_": {
-        "items": {
-          "type": "string",
-          "pattern": "^biolink:[A-Z][a-zA-Z]*$"
-        },
-        "type": "array",
-        "uniqueItems": true,
-        "title": "HashableSet[BiolinkEntity]",
-        "description": "Custom class that implements MutableSet and is hashable",
-        "default": []
-      },
-      "HashableSet_CURIE_": {
-        "items": {
-          "type": "string"
-        },
-        "type": "array",
-        "uniqueItems": true,
-        "title": "HashableSet[CURIE]",
-        "description": "Custom class that implements MutableSet and is hashable",
-        "default": []
-      },
-      "HashableSet_EdgeBinding_": {
-        "items": {
-          "$ref": "#/components/schemas/EdgeBinding"
-        },
-        "type": "array",
-        "uniqueItems": true,
-        "title": "HashableSet[EdgeBinding]",
-        "description": "Custom class that implements MutableSet and is hashable",
-        "default": []
-      },
-      "HashableSet_NodeBinding_": {
-        "items": {
-          "$ref": "#/components/schemas/NodeBinding"
-        },
-        "type": "array",
-        "uniqueItems": true,
-        "title": "HashableSet[NodeBinding]",
-        "description": "Custom class that implements MutableSet and is hashable",
-        "default": []
-      },
-      "HashableSet_Qualifier_": {
-        "items": {
-          "$ref": "#/components/schemas/Qualifier"
-        },
-        "type": "array",
-        "uniqueItems": true,
-        "title": "HashableSet[Qualifier]",
-        "description": "Custom class that implements MutableSet and is hashable",
-        "default": []
-      },
-      "HashableSet_RetrievalSource_": {
-        "items": {
-          "$ref": "#/components/schemas/RetrievalSource"
-        },
-        "type": "array",
-        "uniqueItems": true,
-        "title": "HashableSet[RetrievalSource]",
-        "description": "Custom class that implements MutableSet and is hashable",
-        "default": []
-      },
-      "HashableSet_str_": {
-        "items": {
-          "type": "string"
-        },
-        "type": "array",
-        "uniqueItems": true,
-        "title": "HashableSet[str]",
-        "description": "Custom class that implements MutableSet and is hashable",
-        "default": []
-      },
-      "KnowledgeGraph": {
-        "properties": {
-          "nodes": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/HashableMapping_CURIE__Node_"
-              }
-            ],
-            "title": "nodes"
-          },
-          "edges": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/HashableMapping_EdgeIdentifier__Edge_"
-              }
-            ],
-            "title": "edges"
-          }
-        },
-        "type": "object",
-        "required": [
-          "nodes",
-          "edges"
-        ],
-        "title": "knowledge graph",
-        "description": "Knowledge graph."
-      },
-      "KnowledgeType": {
-        "type": "string",
-        "enum": [
-          "lookup",
-          "inferred"
-        ],
-        "title": "KnowledgeType",
-        "description": "Knowledge Type."
-      },
-      "LogLevel": {
-        "$ref": "#/components/schemas/LogLevelEnum",
-        "title": "LogLevel",
-        "description": "Log level."
-      },
-      "LogLevelEnum": {
-        "type": "string",
-        "enum": [
-          "ERROR",
-          "WARNING",
-          "INFO",
-          "DEBUG"
-        ],
-        "title": "LogLevelEnum",
-        "description": "Log level."
-      },
-      "Message": {
-        "properties": {
-          "query_graph": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/QueryGraph"
-              }
-            ],
-            "title": "query graph",
-            "nullable": true
-          },
-          "knowledge_graph": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/KnowledgeGraph"
-              }
-            ],
-            "title": "knowledge graph",
-            "nullable": true
-          },
-          "results": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/Results"
-              }
-            ],
-            "title": "list of results",
-            "nullable": true
-          },
-          "auxiliary_graphs": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/AuxiliaryGraphs"
-              }
-            ],
-            "title": "dict of auxiliary graphs",
-            "nullable": true
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "title": "message",
-        "description": "Message."
-      },
-      "Node": {
-        "properties": {
-          "categories": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/HashableSet_BiolinkEntity_"
-              }
-            ],
-            "title": "categories",
-            "nullable": true
-          },
-          "name": {
-            "type": "string",
-            "title": "Name",
-            "nullable": true
-          },
-          "attributes": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/HashableSet_Attribute_"
-              }
-            ],
-            "title": "Attributes",
-            "nullable": true
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "title": "knowledge-graph node",
-        "description": "Knowledge graph node.",
-        "example": {
-          "category": "string"
-        }
-      },
-      "NodeBinding": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "title": "knowledge graph id"
-          },
-          "query_id": {
-            "type": "string",
-            "title": "query graph id"
-          },
-          "attributes": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/HashableSet_Attribute_"
-              }
-            ],
-            "title": "Attributes",
-            "nullable": true
-          }
-        },
-        "type": "object",
-        "required": [
-          "id"
-        ],
-        "title": "node binding",
-        "description": "Node binding.",
-        "example": {
-          "id": "x:string"
-        }
-      },
-      "Operation": {
-        "anyOf": [
-          {
-            "$ref": "#/components/schemas/OperationAnnotate"
-          },
-          {
-            "$ref": "#/components/schemas/OperationAnnotateEdges"
-          },
-          {
-            "$ref": "#/components/schemas/OperationAnnotateNodes"
-          },
-          {
-            "$ref": "#/components/schemas/OperationBind"
-          },
-          {
-            "$ref": "#/components/schemas/OperationCompleteResults"
-          },
-          {
-            "$ref": "#/components/schemas/OperationEnrichResults"
-          },
-          {
-            "$ref": "#/components/schemas/OperationFill"
-          },
-          {
-            "$ref": "#/components/schemas/OperationFilterKgraph"
-          },
-          {
-            "$ref": "#/components/schemas/OperationFilterKgraphContinuousKedgeAttribute"
-          },
-          {
-            "$ref": "#/components/schemas/OperationFilterKgraphDiscreteKedgeAttribute"
-          },
-          {
-            "$ref": "#/components/schemas/OperationFilterKgraphDiscreteKnodeAttribute"
-          },
-          {
-            "$ref": "#/components/schemas/OperationFilterKgraphOrphans"
-          },
-          {
-            "$ref": "#/components/schemas/OperationFilterKgraphPercentile"
-          },
-          {
-            "$ref": "#/components/schemas/OperationFilterKgraphStdDev"
-          },
-          {
-            "$ref": "#/components/schemas/OperationFilterKgraphTopN"
-          },
-          {
-            "$ref": "#/components/schemas/OperationFilterResults"
-          },
-          {
-            "$ref": "#/components/schemas/OperationFilterResultsTopN"
-          },
-          {
-            "$ref": "#/components/schemas/OperationLookup"
-          },
-          {
-            "$ref": "#/components/schemas/OperationOverlay"
-          },
-          {
-            "$ref": "#/components/schemas/OperationOverlayComputeJaccard"
-          },
-          {
-            "$ref": "#/components/schemas/OperationOverlayComputeNgd"
-          },
-          {
-            "$ref": "#/components/schemas/OperationOverlayConnectKnodes"
-          },
-          {
-            "$ref": "#/components/schemas/OperationOverlayFisherExactTest"
-          },
-          {
-            "$ref": "#/components/schemas/OperationRestate"
-          },
-          {
-            "$ref": "#/components/schemas/OperationScore"
-          },
-          {
-            "$ref": "#/components/schemas/OperationSortResults"
-          },
-          {
-            "$ref": "#/components/schemas/OperationSortResultsEdgeAttribute"
-          },
-          {
-            "$ref": "#/components/schemas/OperationSortResultsNodeAttribute"
-          },
-          {
-            "$ref": "#/components/schemas/OperationSortResultsScore"
-          }
-        ],
-        "title": "Operation",
-        "description": "Custom base model for all classes\n\nThis provides hash and equality methods."
-      },
-      "OperationAnnotate": {
-        "properties": {
-          "runner_parameters": {
-            "$ref": "#/components/schemas/RunnerParameters"
-          },
-          "id": {
-            "$ref": "#/components/schemas/annotate"
-          },
-          "parameters": {
-            "title": "Parameters"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "id"
-        ],
-        "title": "OperationAnnotate",
-        "description": "Custom base model for all classes\n\nThis provides hash and equality methods."
-      },
-      "OperationAnnotateEdges": {
-        "properties": {
-          "runner_parameters": {
-            "$ref": "#/components/schemas/RunnerParameters"
-          },
-          "id": {
-            "$ref": "#/components/schemas/annotate_edges"
-          },
-          "parameters": {
-            "$ref": "#/components/schemas/AnnotateEdgesParameters"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "id"
-        ],
-        "title": "OperationAnnotateEdges",
-        "description": "Custom base model for all classes\n\nThis provides hash and equality methods."
-      },
-      "OperationAnnotateNodes": {
-        "properties": {
-          "runner_parameters": {
-            "$ref": "#/components/schemas/RunnerParameters"
-          },
-          "id": {
-            "$ref": "#/components/schemas/annotate_nodes"
-          },
-          "parameters": {
-            "$ref": "#/components/schemas/AnnotateNodesParameters"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "id"
-        ],
-        "title": "OperationAnnotateNodes",
-        "description": "Custom base model for all classes\n\nThis provides hash and equality methods."
-      },
-      "OperationBind": {
-        "properties": {
-          "runner_parameters": {
-            "$ref": "#/components/schemas/RunnerParameters"
-          },
-          "id": {
-            "$ref": "#/components/schemas/bind"
-          },
-          "parameters": {
-            "title": "Parameters"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "id"
-        ],
-        "title": "OperationBind",
-        "description": "Custom base model for all classes\n\nThis provides hash and equality methods."
-      },
-      "OperationCompleteResults": {
-        "properties": {
-          "runner_parameters": {
-            "$ref": "#/components/schemas/RunnerParameters"
-          },
-          "id": {
-            "$ref": "#/components/schemas/complete_results"
-          },
-          "parameters": {
-            "title": "Parameters"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "id"
-        ],
-        "title": "OperationCompleteResults",
-        "description": "Custom base model for all classes\n\nThis provides hash and equality methods."
-      },
-      "OperationEnrichResults": {
-        "properties": {
-          "runner_parameters": {
-            "$ref": "#/components/schemas/RunnerParameters"
-          },
-          "id": {
-            "$ref": "#/components/schemas/enrich_results"
-          },
-          "parameters": {
-            "$ref": "#/components/schemas/EnrichResultsParameters"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "id"
-        ],
-        "title": "OperationEnrichResults",
-        "description": "Custom base model for all classes\n\nThis provides hash and equality methods."
-      },
-      "OperationFill": {
-        "properties": {
-          "runner_parameters": {
-            "$ref": "#/components/schemas/RunnerParameters"
-          },
-          "id": {
-            "$ref": "#/components/schemas/fill"
-          },
-          "parameters": {
-            "$ref": "#/components/schemas/FillParameters"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "id"
-        ],
-        "title": "OperationFill",
-        "description": "Custom base model for all classes\n\nThis provides hash and equality methods."
-      },
-      "OperationFilterKgraph": {
-        "properties": {
-          "runner_parameters": {
-            "$ref": "#/components/schemas/RunnerParameters"
-          },
-          "id": {
-            "$ref": "#/components/schemas/filter_kgraph"
-          },
-          "parameters": {
-            "title": "Parameters"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "id"
-        ],
-        "title": "OperationFilterKgraph",
-        "description": "Custom base model for all classes\n\nThis provides hash and equality methods."
-      },
-      "OperationFilterKgraphContinuousKedgeAttribute": {
-        "properties": {
-          "runner_parameters": {
-            "$ref": "#/components/schemas/RunnerParameters"
-          },
-          "id": {
-            "$ref": "#/components/schemas/filter_kgraph_continuous_kedge_attribute"
-          },
-          "parameters": {
-            "$ref": "#/components/schemas/FilterKgraphContinuousKedgeAttributeParameters"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "id",
-          "parameters"
-        ],
-        "title": "OperationFilterKgraphContinuousKedgeAttribute",
-        "description": "Custom base model for all classes\n\nThis provides hash and equality methods."
-      },
-      "OperationFilterKgraphDiscreteKedgeAttribute": {
-        "properties": {
-          "runner_parameters": {
-            "$ref": "#/components/schemas/RunnerParameters"
-          },
-          "id": {
-            "$ref": "#/components/schemas/filter_kgraph_discrete_kedge_attribute"
-          },
-          "parameters": {
-            "$ref": "#/components/schemas/FilterKgraphDiscreteKedgeAttributeParameters"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "id",
-          "parameters"
-        ],
-        "title": "OperationFilterKgraphDiscreteKedgeAttribute",
-        "description": "Custom base model for all classes\n\nThis provides hash and equality methods."
-      },
-      "OperationFilterKgraphDiscreteKnodeAttribute": {
-        "properties": {
-          "runner_parameters": {
-            "$ref": "#/components/schemas/RunnerParameters"
-          },
-          "id": {
-            "$ref": "#/components/schemas/filter_kgraph_discrete_knode_attribute"
-          },
-          "parameters": {
-            "$ref": "#/components/schemas/FilterKgraphDiscreteKnodeAttributeParameters"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "id",
-          "parameters"
-        ],
-        "title": "OperationFilterKgraphDiscreteKnodeAttribute",
-        "description": "Custom base model for all classes\n\nThis provides hash and equality methods."
-      },
-      "OperationFilterKgraphOrphans": {
-        "properties": {
-          "runner_parameters": {
-            "$ref": "#/components/schemas/RunnerParameters"
-          },
-          "id": {
-            "$ref": "#/components/schemas/filter_kgraph_orphans"
-          },
-          "parameters": {
-            "title": "Parameters"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "id"
-        ],
-        "title": "OperationFilterKgraphOrphans",
-        "description": "Custom base model for all classes\n\nThis provides hash and equality methods."
-      },
-      "OperationFilterKgraphPercentile": {
-        "properties": {
-          "runner_parameters": {
-            "$ref": "#/components/schemas/RunnerParameters"
-          },
-          "id": {
-            "$ref": "#/components/schemas/filter_kgraph_percentile"
-          },
-          "parameters": {
-            "$ref": "#/components/schemas/FilterKgraphPercentileParameters"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "id",
-          "parameters"
-        ],
-        "title": "OperationFilterKgraphPercentile",
-        "description": "Custom base model for all classes\n\nThis provides hash and equality methods."
-      },
-      "OperationFilterKgraphStdDev": {
-        "properties": {
-          "runner_parameters": {
-            "$ref": "#/components/schemas/RunnerParameters"
-          },
-          "id": {
-            "$ref": "#/components/schemas/filter_kgraph_std_dev"
-          },
-          "parameters": {
-            "$ref": "#/components/schemas/FilterKgraphStdDevParameters"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "id",
-          "parameters"
-        ],
-        "title": "OperationFilterKgraphStdDev",
-        "description": "Custom base model for all classes\n\nThis provides hash and equality methods."
-      },
-      "OperationFilterKgraphTopN": {
-        "properties": {
-          "runner_parameters": {
-            "$ref": "#/components/schemas/RunnerParameters"
-          },
-          "id": {
-            "$ref": "#/components/schemas/filter_kgraph_top_n"
-          },
-          "parameters": {
-            "$ref": "#/components/schemas/FilterKgraphTopNParameters"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "id",
-          "parameters"
-        ],
-        "title": "OperationFilterKgraphTopN",
-        "description": "Custom base model for all classes\n\nThis provides hash and equality methods."
-      },
-      "OperationFilterResults": {
-        "properties": {
-          "runner_parameters": {
-            "$ref": "#/components/schemas/RunnerParameters"
-          },
-          "id": {
-            "$ref": "#/components/schemas/filter_results"
-          },
-          "parameters": {
-            "title": "Parameters"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "id"
-        ],
-        "title": "OperationFilterResults",
-        "description": "Custom base model for all classes\n\nThis provides hash and equality methods."
-      },
-      "OperationFilterResultsTopN": {
-        "properties": {
-          "runner_parameters": {
-            "$ref": "#/components/schemas/RunnerParameters"
-          },
-          "id": {
-            "$ref": "#/components/schemas/filter_results_top_n"
-          },
-          "parameters": {
-            "$ref": "#/components/schemas/FilterResultsTopNParameters"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "id"
-        ],
-        "title": "OperationFilterResultsTopN",
-        "description": "Custom base model for all classes\n\nThis provides hash and equality methods."
-      },
-      "OperationLookup": {
-        "properties": {
-          "runner_parameters": {
-            "$ref": "#/components/schemas/RunnerParameters"
-          },
-          "id": {
-            "$ref": "#/components/schemas/lookup"
-          },
-          "parameters": {
-            "title": "Parameters"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "id"
-        ],
-        "title": "OperationLookup",
-        "description": "Custom base model for all classes\n\nThis provides hash and equality methods."
-      },
-      "OperationOverlay": {
-        "properties": {
-          "runner_parameters": {
-            "$ref": "#/components/schemas/RunnerParameters"
-          },
-          "id": {
-            "$ref": "#/components/schemas/overlay"
-          },
-          "parameters": {
-            "title": "Parameters"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "id"
-        ],
-        "title": "OperationOverlay",
-        "description": "Custom base model for all classes\n\nThis provides hash and equality methods."
-      },
-      "OperationOverlayComputeJaccard": {
-        "properties": {
-          "runner_parameters": {
-            "$ref": "#/components/schemas/RunnerParameters"
-          },
-          "id": {
-            "$ref": "#/components/schemas/overlay_compute_jaccard"
-          },
-          "parameters": {
-            "$ref": "#/components/schemas/OverlayComputeJaccardParameters"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "id",
-          "parameters"
-        ],
-        "title": "OperationOverlayComputeJaccard",
-        "description": "Custom base model for all classes\n\nThis provides hash and equality methods."
-      },
-      "OperationOverlayComputeNgd": {
-        "properties": {
-          "runner_parameters": {
-            "$ref": "#/components/schemas/RunnerParameters"
-          },
-          "id": {
-            "$ref": "#/components/schemas/overlay_compute_ngd"
-          },
-          "parameters": {
-            "$ref": "#/components/schemas/OverlayComputeNgdParameters"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "id",
-          "parameters"
-        ],
-        "title": "OperationOverlayComputeNgd",
-        "description": "Custom base model for all classes\n\nThis provides hash and equality methods."
-      },
-      "OperationOverlayConnectKnodes": {
-        "properties": {
-          "runner_parameters": {
-            "$ref": "#/components/schemas/RunnerParameters"
-          },
-          "id": {
-            "$ref": "#/components/schemas/overlay_connect_knodes"
-          },
-          "parameters": {
-            "title": "Parameters"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "id"
-        ],
-        "title": "OperationOverlayConnectKnodes",
-        "description": "Custom base model for all classes\n\nThis provides hash and equality methods."
-      },
-      "OperationOverlayFisherExactTest": {
-        "properties": {
-          "runner_parameters": {
-            "$ref": "#/components/schemas/RunnerParameters"
-          },
-          "id": {
-            "$ref": "#/components/schemas/overlay_fisher_exact_test"
-          },
-          "parameters": {
-            "$ref": "#/components/schemas/OverlayFisherExactTestParameters"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "id",
-          "parameters"
-        ],
-        "title": "OperationOverlayFisherExactTest",
-        "description": "Custom base model for all classes\n\nThis provides hash and equality methods."
-      },
-      "OperationRestate": {
-        "properties": {
-          "runner_parameters": {
-            "$ref": "#/components/schemas/RunnerParameters"
-          },
-          "id": {
-            "$ref": "#/components/schemas/restate"
-          },
-          "parameters": {
-            "title": "Parameters"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "id"
-        ],
-        "title": "OperationRestate",
-        "description": "Custom base model for all classes\n\nThis provides hash and equality methods."
-      },
-      "OperationScore": {
-        "properties": {
-          "runner_parameters": {
-            "$ref": "#/components/schemas/RunnerParameters"
-          },
-          "id": {
-            "$ref": "#/components/schemas/score"
-          },
-          "parameters": {
-            "title": "Parameters"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "id"
-        ],
-        "title": "OperationScore",
-        "description": "Custom base model for all classes\n\nThis provides hash and equality methods."
-      },
-      "OperationSortResults": {
-        "properties": {
-          "runner_parameters": {
-            "$ref": "#/components/schemas/RunnerParameters"
-          },
-          "id": {
-            "$ref": "#/components/schemas/sort_results"
-          },
-          "parameters": {
-            "title": "Parameters"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "id"
-        ],
-        "title": "OperationSortResults",
-        "description": "Custom base model for all classes\n\nThis provides hash and equality methods."
-      },
-      "OperationSortResultsEdgeAttribute": {
-        "properties": {
-          "runner_parameters": {
-            "$ref": "#/components/schemas/RunnerParameters"
-          },
-          "id": {
-            "$ref": "#/components/schemas/sort_results_edge_attribute"
-          },
-          "parameters": {
-            "$ref": "#/components/schemas/SortResultsEdgeAttributeParameters"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "id",
-          "parameters"
-        ],
-        "title": "OperationSortResultsEdgeAttribute",
-        "description": "Custom base model for all classes\n\nThis provides hash and equality methods."
-      },
-      "OperationSortResultsNodeAttribute": {
-        "properties": {
-          "runner_parameters": {
-            "$ref": "#/components/schemas/RunnerParameters"
-          },
-          "id": {
-            "$ref": "#/components/schemas/sort_results_node_attribute"
-          },
-          "parameters": {
-            "$ref": "#/components/schemas/SortResultsNodeAttributeParameters"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "id",
-          "parameters"
-        ],
-        "title": "OperationSortResultsNodeAttribute",
-        "description": "Custom base model for all classes\n\nThis provides hash and equality methods."
-      },
-      "OperationSortResultsScore": {
-        "properties": {
-          "runner_parameters": {
-            "$ref": "#/components/schemas/RunnerParameters"
-          },
-          "id": {
-            "$ref": "#/components/schemas/sort_results_score"
-          },
-          "parameters": {
-            "$ref": "#/components/schemas/SortResultsScoreParameters"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "id",
-          "parameters"
-        ],
-        "title": "OperationSortResultsScore",
-        "description": "Custom base model for all classes\n\nThis provides hash and equality methods."
-      },
-      "Operator": {
-        "type": "string",
-        "enum": [
-          "==",
-          "===",
-          ">",
-          "<",
-          "matches"
-        ],
-        "title": "Operator",
-        "description": "Operator."
-      },
-      "OverlayComputeJaccardParameters": {
-        "properties": {
-          "intermediate_node_key": {
-            "type": "string",
-            "title": "Intermediate Node Key"
-          },
-          "end_node_keys": {
-            "$ref": "#/components/schemas/HashableSequence_str_"
-          },
-          "virtual_relation_label": {
-            "type": "string",
-            "title": "Virtual Relation Label"
-          }
-        },
-        "type": "object",
-        "required": [
-          "intermediate_node_key",
-          "end_node_keys",
-          "virtual_relation_label"
-        ],
-        "title": "OverlayComputeJaccardParameters",
-        "description": "Custom base model for all classes\n\nThis provides hash and equality methods."
-      },
-      "OverlayComputeNgdParameters": {
-        "properties": {
-          "qnode_keys": {
-            "$ref": "#/components/schemas/HashableSequence_str_"
-          },
-          "virtual_relation_label": {
-            "type": "string",
-            "title": "Virtual Relation Label"
-          }
-        },
-        "type": "object",
-        "required": [
-          "qnode_keys",
-          "virtual_relation_label"
-        ],
-        "title": "OverlayComputeNgdParameters",
-        "description": "Custom base model for all classes\n\nThis provides hash and equality methods."
-      },
-      "OverlayFisherExactTestParameters": {
-        "properties": {
-          "subject_qnode_key": {
-            "type": "string",
-            "title": "Subject Qnode Key"
-          },
-          "object_qnode_key": {
-            "type": "string",
-            "title": "Object Qnode Key"
-          },
-          "virtual_relation_label": {
-            "type": "string",
-            "title": "Virtual Relation Label"
-          },
-          "rel_edge_key": {
-            "type": "string",
-            "title": "Rel Edge Key"
-          }
-        },
-        "type": "object",
-        "required": [
-          "subject_qnode_key",
-          "object_qnode_key",
-          "virtual_relation_label"
-        ],
-        "title": "OverlayFisherExactTestParameters",
-        "description": "Custom base model for all classes\n\nThis provides hash and equality methods."
-      },
-      "PlusOrMinusEnum": {
-        "type": "string",
-        "enum": [
-          "plus",
-          "minus"
-        ],
-        "title": "PlusOrMinusEnum",
-        "description": "'plus' or 'minus'."
-      },
-      "QEdge": {
-        "properties": {
-          "subject": {
-            "type": "string",
-            "title": "subject node id"
-          },
-          "object": {
-            "type": "string",
-            "title": "object node id"
-          },
-          "knowledge_type": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/KnowledgeType"
-              }
-            ],
-            "title": "knowledge type"
-          },
-          "predicates": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/HashableSequence_BiolinkPredicate_"
-              }
-            ],
-            "title": "predicates",
-            "nullable": true
-          },
-          "attribute_constraints": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/HashableSequence_AttributeConstraint_"
-              }
-            ],
-            "title": "attribute constraints",
-            "default": {
-              "__root__": []
-            }
-          },
-          "qualifier_constraints": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/HashableSequence_QualifierConstraint_"
-              }
-            ],
-            "title": "qualifier constraint",
-            "default": {
-              "__root__": []
-            }
-          }
-        },
-        "type": "object",
-        "required": [
-          "subject",
-          "object"
-        ],
-        "title": "query-graph edge",
-        "description": "Query edge."
-      },
-      "QNode": {
-        "properties": {
-          "ids": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/HashableSequence_CURIE_"
-              }
-            ],
-            "title": "ids",
-            "nullable": true
-          },
-          "categories": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/HashableSequence_BiolinkEntity_"
-              }
-            ],
-            "title": "categories",
-            "nullable": true
-          },
-          "is_set": {
-            "type": "boolean",
-            "title": "Is Set",
-            "default": false
-          },
-          "constraints": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/HashableSequence_AttributeConstraint_"
-              }
-            ],
-            "title": "attribute constraints",
-            "default": {
-              "__root__": []
-            }
-          }
-        },
-        "type": "object",
-        "title": "query-graph node",
-        "description": "Query node."
-      },
-      "Qualifier": {
-        "properties": {
-          "qualifier_type_id": {
-            "type": "string",
-            "pattern": "^biolink:[a-z][a-z_]*$",
-            "title": "type"
-          },
-          "qualifier_value": {
-            "type": "string",
-            "title": "value"
-          }
-        },
-        "type": "object",
-        "required": [
-          "qualifier_type_id",
-          "qualifier_value"
-        ],
-        "title": "Qualifier",
-        "description": "Edge qualifier."
-      },
-      "QualifierConstraint": {
-        "properties": {
-          "qualifier_set": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/HashableSequence_Qualifier_"
-              }
-            ],
-            "title": "qualifier set",
-            "default": {
-              "__root__": []
-            }
-          }
-        },
-        "type": "object",
-        "title": "QualifierConstraint",
-        "description": "QEdge Qualifier constraint."
-      },
-      "Query": {
-        "properties": {
-          "message": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/Message"
-              }
-            ],
-            "title": "message"
-          },
-          "log_level": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/LogLevel"
-              }
-            ],
-            "title": "log_level",
-            "nullable": true
-          },
-          "workflow": {
-            "$ref": "#/components/schemas/Workflow"
-          }
-        },
-        "type": "object",
-        "required": [
-          "message"
-        ],
-        "title": "query",
-        "description": "Request.",
-        "x-body-name": "request_body"
-      },
-      "QueryGraph": {
-        "properties": {
-          "nodes": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/HashableMapping_str__QNode_"
-              }
-            ],
-            "title": "dict of nodes"
-          },
-          "edges": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/HashableMapping_str__QEdge_"
-              }
-            ],
-            "title": "dict of edges"
-          }
-        },
-        "type": "object",
-        "required": [
-          "nodes",
-          "edges"
-        ],
-        "title": "simple query graph",
-        "description": "Query graph."
-      },
-      "RecursiveAttribute": {
-        "properties": {
-          "attribute_type_id": {
-            "type": "string",
-            "title": "type"
-          },
-          "value": {
-            "title": "value"
-          },
-          "value_type_id": {
-            "type": "string",
-            "title": "value_type_id",
-            "nullable": true
-          },
-          "original_attribute_name": {
-            "type": "string",
-            "title": "Original Attribute Name",
-            "nullable": true
-          },
-          "value_url": {
-            "type": "string",
-            "title": "Value Url",
-            "nullable": true
-          },
-          "attribute_source": {
-            "type": "string",
-            "title": "Attribute Source",
-            "nullable": true
-          },
-          "description": {
-            "type": "string",
-            "title": "Description",
-            "nullable": true
-          },
-          "attributes": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/HashableSequence_RecursiveAttribute_"
-              }
-            ],
-            "title": "Attributes",
-            "nullable": true
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "attribute_type_id",
-          "value"
-        ],
-        "title": "RecursiveAttribute",
-        "description": "Attribute subattribute."
-      },
-      "ResourceRoleEnum": {
-        "type": "string",
-        "enum": [
-          "aggregator_knowledge_source",
-          "primary_knowledge_source",
-          "supporting_data_source"
-        ],
-        "title": "ResourceRoleEnum",
-        "description": "Types of resources"
-      },
-      "Result": {
-        "properties": {
-          "node_bindings": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/HashableMapping_str__HashableSet_NodeBinding__"
-              }
-            ],
-            "title": "list of node bindings"
-          },
-          "analyses": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/HashableSet_Analysis_"
-              }
-            ],
-            "title": "list of anlysis blocks"
-          }
-        },
-        "type": "object",
-        "required": [
-          "node_bindings",
-          "analyses"
-        ],
-        "title": "result",
-        "description": "Result."
-      },
-      "Results": {
-        "$ref": "#/components/schemas/HashableSequence_Result_",
-        "title": "results",
-        "description": "Results."
-      },
-      "RetrievalSource": {
-        "properties": {
-          "resource_id": {
-            "type": "string",
-            "title": "infores for source"
-          },
-          "resource_role": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/ResourceRoleEnum"
-              }
-            ],
-            "title": "source type"
-          },
-          "upstream_resource_ids": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/HashableSet_CURIE_"
-              }
-            ],
-            "title": "Upstream Resource Ids",
-            "nullable": true
-          },
-          "source_record_urls": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/HashableSet_str_"
-              }
-            ],
-            "title": "Source Record Urls",
-            "nullable": true
-          }
-        },
-        "type": "object",
-        "required": [
-          "resource_id",
-          "resource_role"
-        ],
-        "title": "RetrievalSource",
-        "description": "A component of source retrieval provenance"
-      },
-      "RunnerAllowList": {
-        "properties": {
-          "allowlist": {
-            "$ref": "#/components/schemas/HashableSequence_str_"
-          },
-          "timeout": {
-            "type": "number",
-            "title": "Timeout"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "title": "RunnerAllowList",
-        "description": "Custom base model for all classes\n\nThis provides hash and equality methods."
-      },
-      "RunnerDenyList": {
-        "properties": {
-          "denylist": {
-            "$ref": "#/components/schemas/HashableSequence_str_"
-          },
-          "timeout": {
-            "type": "number",
-            "title": "Timeout"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "title": "RunnerDenyList",
-        "description": "Custom base model for all classes\n\nThis provides hash and equality methods."
-      },
-      "RunnerParameters": {
-        "anyOf": [
-          {
-            "$ref": "#/components/schemas/RunnerAllowList"
-          },
-          {
-            "$ref": "#/components/schemas/RunnerDenyList"
-          },
-          {
-            "$ref": "#/components/schemas/RunnerTimeout"
-          }
-        ],
-        "title": "RunnerParameters",
-        "description": "Custom base model for all classes\n\nThis provides hash and equality methods."
-      },
-      "RunnerTimeout": {
-        "properties": {
-          "timeout": {
-            "type": "number",
-            "title": "Timeout"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "title": "RunnerTimeout",
-        "description": "Custom base model for all classes\n\nThis provides hash and equality methods."
-      },
-      "SemanticTypes": {
-        "properties": {
-          "semantic_types": {
-            "additionalProperties": {
-              "items": {},
-              "type": "array"
-            },
-            "type": "object",
-            "title": "Semantic Types"
-          }
-        },
-        "type": "object",
-        "required": [
-          "semantic_types"
-        ],
-        "title": "SemanticTypes",
-        "example": {
-          "semantic_types": {
-            "types": [
-              "biolink:CellularComponent",
-              "biolink:NamedThing",
-              "etc."
-            ]
-          }
-        }
-      },
-      "SemanticTypesInput": {
-        "properties": {
-          "semantic_types": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "list of semantic types"
-          }
-        },
-        "type": "object",
-        "required": [
-          "semantic_types"
-        ],
-        "title": "SemanticTypesInput",
-        "description": "Semantic type input model",
-        "example": {
-          "semantic_types": [
-            "biolink:ChemicalEntity",
-            "biolink:AnatomicalEntity"
-          ]
-        }
-      },
-      "SetIDQuery": {
-        "properties": {
-          "curies": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Curies",
-            "description": "Set of curies to normalize",
-            "example": [
-              "MESH:D014867",
-              "NCIT:C34373"
-            ]
-          },
-          "conflations": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Conflations",
-            "description": "Set of conflations to apply",
-            "default": [],
-            "example": [
-              "GeneProtein",
-              "DrugChemical"
-            ]
-          }
-        },
-        "type": "object",
-        "required": [
-          "curies"
-        ],
-        "title": "SetIDQuery",
-        "description": "Query for a single SetID. Includes a set of CURIEs as well as a set of conflations to apply. "
-      },
-      "SetIDResponse": {
-        "properties": {
-          "curies": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Curies"
-          },
-          "conflations": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Conflations"
-          },
-          "error": {
-            "type": "string",
-            "title": "Error"
-          },
-          "normalized_curies": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Normalized Curies"
-          },
-          "normalized_string": {
-            "type": "string",
-            "title": "Normalized String"
-          },
-          "setid": {
-            "type": "string",
-            "title": "Setid"
-          }
-        },
-        "type": "object",
-        "required": [
-          "curies",
-          "conflations"
-        ],
-        "title": "SetIDResponse"
-      },
-      "SortResultsEdgeAttributeParameters": {
-        "properties": {
-          "edge_attribute": {
-            "type": "string",
-            "title": "Edge Attribute"
-          },
-          "ascending_or_descending": {
-            "$ref": "#/components/schemas/AscOrDescEnum"
-          },
-          "qedge_keys": {
-            "$ref": "#/components/schemas/HashableSequence_str_"
-          }
-        },
-        "type": "object",
-        "required": [
-          "edge_attribute",
-          "ascending_or_descending"
-        ],
-        "title": "SortResultsEdgeAttributeParameters",
-        "description": "Custom base model for all classes\n\nThis provides hash and equality methods."
-      },
-      "SortResultsNodeAttributeParameters": {
-        "properties": {
-          "node_attribute": {
-            "type": "string",
-            "title": "Node Attribute"
-          },
-          "ascending_or_descending": {
-            "$ref": "#/components/schemas/AscOrDescEnum"
-          },
-          "qnode_keys": {
-            "$ref": "#/components/schemas/HashableSequence_str_"
-          }
-        },
-        "type": "object",
-        "required": [
-          "node_attribute",
-          "ascending_or_descending"
-        ],
-        "title": "SortResultsNodeAttributeParameters",
-        "description": "Custom base model for all classes\n\nThis provides hash and equality methods."
-      },
-      "SortResultsScoreParameters": {
-        "properties": {
-          "ascending_or_descending": {
-            "$ref": "#/components/schemas/AscOrDescEnum"
-          }
-        },
-        "type": "object",
-        "required": [
-          "ascending_or_descending"
-        ],
-        "title": "SortResultsScoreParameters",
-        "description": "Custom base model for all classes\n\nThis provides hash and equality methods."
-      },
-      "SubAttribute": {
-        "properties": {
-          "attribute_type_id": {
-            "type": "string",
-            "title": "type"
-          },
-          "value": {
-            "title": "value"
-          },
-          "value_type_id": {
-            "type": "string",
-            "title": "value_type_id",
-            "nullable": true
-          },
-          "original_attribute_name": {
-            "type": "string",
-            "title": "Original Attribute Name",
-            "nullable": true
-          },
-          "value_url": {
-            "type": "string",
-            "title": "Value Url",
-            "nullable": true
-          },
-          "attribute_source": {
-            "type": "string",
-            "title": "Attribute Source",
-            "nullable": true
-          },
-          "description": {
-            "type": "string",
-            "title": "Description",
-            "nullable": true
-          },
-          "attributes": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/HashableSequence_RecursiveAttribute_"
-              }
-            ],
-            "title": "Attributes",
-            "nullable": true
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "attribute_type_id",
-          "value"
-        ],
-        "title": "SubAttribute",
-        "description": "Attribute subattribute."
-      },
-      "TopOrBottomEnum": {
-        "type": "string",
-        "enum": [
-          "top",
-          "bottom"
-        ],
-        "title": "TopOrBottomEnum",
-        "description": "'top' or 'bottom'."
-      },
-      "ValidationError": {
-        "properties": {
-          "loc": {
-            "items": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "integer"
-                }
-              ]
-            },
-            "type": "array",
-            "title": "Location"
-          },
-          "msg": {
-            "type": "string",
-            "title": "Message"
-          },
-          "type": {
-            "type": "string",
-            "title": "Error Type"
-          }
-        },
-        "type": "object",
-        "required": [
-          "loc",
-          "msg",
-          "type"
-        ],
-        "title": "ValidationError"
-      },
-      "Workflow": {
-        "$ref": "#/components/schemas/HashableSequence_Operation_",
-        "title": "Workflow",
-        "description": "Custom base model for all classes\n\nThis provides hash and equality methods."
-      },
-      "annotate": {
-        "type": "string",
-        "enum": [
-          "annotate"
-        ],
-        "title": "annotate",
-        "description": "An enumeration."
-      },
-      "annotate_edges": {
-        "type": "string",
-        "enum": [
-          "annotate_edges"
-        ],
-        "title": "annotate_edges",
-        "description": "An enumeration."
-      },
-      "annotate_nodes": {
-        "type": "string",
-        "enum": [
-          "annotate_nodes"
-        ],
-        "title": "annotate_nodes",
-        "description": "An enumeration."
-      },
-      "bind": {
-        "type": "string",
-        "enum": [
-          "bind"
-        ],
-        "title": "bind",
-        "description": "An enumeration."
-      },
-      "complete_results": {
-        "type": "string",
-        "enum": [
-          "complete_results"
-        ],
-        "title": "complete_results",
-        "description": "An enumeration."
-      },
-      "enrich_results": {
-        "type": "string",
-        "enum": [
-          "enrich_results"
-        ],
-        "title": "enrich_results",
-        "description": "An enumeration."
-      },
-      "fill": {
-        "type": "string",
-        "enum": [
-          "fill"
-        ],
-        "title": "fill",
-        "description": "An enumeration."
-      },
-      "filter_kgraph": {
-        "type": "string",
-        "enum": [
-          "filter_kgraph"
-        ],
-        "title": "filter_kgraph",
-        "description": "An enumeration."
-      },
-      "filter_kgraph_continuous_kedge_attribute": {
-        "type": "string",
-        "enum": [
-          "filter_kgraph_continuous_kedge_attribute"
-        ],
-        "title": "filter_kgraph_continuous_kedge_attribute",
-        "description": "An enumeration."
-      },
-      "filter_kgraph_discrete_kedge_attribute": {
-        "type": "string",
-        "enum": [
-          "filter_kgraph_discrete_kedge_attribute"
-        ],
-        "title": "filter_kgraph_discrete_kedge_attribute",
-        "description": "An enumeration."
-      },
-      "filter_kgraph_discrete_knode_attribute": {
-        "type": "string",
-        "enum": [
-          "filter_kgraph_discrete_knode_attribute"
-        ],
-        "title": "filter_kgraph_discrete_knode_attribute",
-        "description": "An enumeration."
-      },
-      "filter_kgraph_orphans": {
-        "type": "string",
-        "enum": [
-          "filter_kgraph_orphans"
-        ],
-        "title": "filter_kgraph_orphans",
-        "description": "An enumeration."
-      },
-      "filter_kgraph_percentile": {
-        "type": "string",
-        "enum": [
-          "filter_kgraph_percentile"
-        ],
-        "title": "filter_kgraph_percentile",
-        "description": "An enumeration."
-      },
-      "filter_kgraph_std_dev": {
-        "type": "string",
-        "enum": [
-          "filter_kgraph_std_dev"
-        ],
-        "title": "filter_kgraph_std_dev",
-        "description": "An enumeration."
-      },
-      "filter_kgraph_top_n": {
-        "type": "string",
-        "enum": [
-          "filter_kgraph_top_n"
-        ],
-        "title": "filter_kgraph_top_n",
-        "description": "An enumeration."
-      },
-      "filter_results": {
-        "type": "string",
-        "enum": [
-          "filter_results"
-        ],
-        "title": "filter_results",
-        "description": "An enumeration."
-      },
-      "filter_results_top_n": {
-        "type": "string",
-        "enum": [
-          "filter_results_top_n"
-        ],
-        "title": "filter_results_top_n",
-        "description": "An enumeration."
-      },
-      "lookup": {
-        "type": "string",
-        "enum": [
-          "lookup"
-        ],
-        "title": "lookup",
-        "description": "An enumeration."
-      },
-      "overlay": {
-        "type": "string",
-        "enum": [
-          "overlay"
-        ],
-        "title": "overlay",
-        "description": "An enumeration."
-      },
-      "overlay_compute_jaccard": {
-        "type": "string",
-        "enum": [
-          "overlay_compute_jaccard"
-        ],
-        "title": "overlay_compute_jaccard",
-        "description": "An enumeration."
-      },
-      "overlay_compute_ngd": {
-        "type": "string",
-        "enum": [
-          "overlay_compute_ngd"
-        ],
-        "title": "overlay_compute_ngd",
-        "description": "An enumeration."
-      },
-      "overlay_connect_knodes": {
-        "type": "string",
-        "enum": [
-          "overlay_connect_knodes"
-        ],
-        "title": "overlay_connect_knodes",
-        "description": "An enumeration."
-      },
-      "overlay_fisher_exact_test": {
-        "type": "string",
-        "enum": [
-          "overlay_fisher_exact_test"
-        ],
-        "title": "overlay_fisher_exact_test",
-        "description": "An enumeration."
-      },
-      "restate": {
-        "type": "string",
-        "enum": [
-          "restate"
-        ],
-        "title": "restate",
-        "description": "An enumeration."
-      },
-      "score": {
-        "type": "string",
-        "enum": [
-          "score"
-        ],
-        "title": "score",
-        "description": "An enumeration."
-      },
-      "sort_results": {
-        "type": "string",
-        "enum": [
-          "sort_results"
-        ],
-        "title": "sort_results",
-        "description": "An enumeration."
-      },
-      "sort_results_edge_attribute": {
-        "type": "string",
-        "enum": [
-          "sort_results_edge_attribute"
-        ],
-        "title": "sort_results_edge_attribute",
-        "description": "An enumeration."
-      },
-      "sort_results_node_attribute": {
-        "type": "string",
-        "enum": [
-          "sort_results_node_attribute"
-        ],
-        "title": "sort_results_node_attribute",
-        "description": "An enumeration."
-      },
-      "sort_results_score": {
-        "type": "string",
-        "enum": [
-          "sort_results_score"
-        ],
-        "title": "sort_results_score",
-        "description": "An enumeration."
-      }
-    }
-  },
+  ],
   "tags": [
     {
       "name": "translator"
@@ -3191,18 +49,570 @@
       "name": "metadata"
     }
   ],
-  "servers": [
-    {
-      "description": "Default server",
-      "url": "https://nodenorm-es.ci.transltr.io/",
-      "x-maturity": "development",
-      "x-location": "RENCI"
+  "paths": {
+    "/status": {
+      "get": {
+        "summary": "Status information on this NodeNorm instance",
+        "tags": ["health"],
+        "description": "Returns information about this NodeNorm instance, the Babel release it serves and the Elasticsearch cluster backing it. `status` is `error` when the Elasticsearch cluster cannot be reached.",
+        "operationId": "status",
+        "responses": {
+          "200": {
+            "description": "Status of this NodeNorm instance",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {"type": "string", "enum": ["running", "error"]},
+                    "version": {"type": "string", "description": "The `info.version` of this OpenAPI document"},
+                    "babel_version": {"type": "string", "description": "The Babel release loaded into the index"},
+                    "babel_version_url": {"type": "string", "format": "uri", "description": "Release notes for that Babel release"},
+                    "backend": {"type": "string", "enum": ["elasticsearch"]},
+                    "biolink_model_toolkit_version": {"type": "string"},
+                    "elasticsearch": {"type": "object", "description": "Per-node statistics from the cluster's `_cat/nodes`"}
+                  },
+                  "required": ["status", "version", "babel_version", "babel_version_url", "backend"]
+                },
+                "example": {
+                  "status": "running",
+                  "version": "1.1.0",
+                  "babel_version": "2025sep1",
+                  "babel_version_url": "https://github.com/NCATSTranslator/Babel/blob/main/releases/2025sep1/README.md",
+                  "backend": "elasticsearch",
+                  "biolink_model_toolkit_version": "v4.4.3",
+                  "elasticsearch": {
+                    "nodes": {
+                      "es-0": {
+                        "name": "es-0",
+                        "cpu": "0",
+                        "disk.avail": "334.2gb",
+                        "disk.total": "786.3gb",
+                        "disk.used": "452.1gb",
+                        "disk.used_percent": "57.50",
+                        "heap.current": "5.8gb",
+                        "heap.max": "16gb",
+                        "load_1m": "0.16",
+                        "load_5m": "0.16",
+                        "load_15m": "0.19",
+                        "uptime": "81.2d",
+                        "version": "9.3.1"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     },
-    {
-      "description": "Localhost",
-      "url": "http://localhost:8000/",
-      "x-maturity": "development",
-      "x-location": "RENCI"
+    "/version": {
+      "get": {
+        "summary": "The git commit this instance was built from",
+        "tags": ["health"],
+        "description": "Returns the git commit hash of the deployed code. For the API version, see `version` in /status.",
+        "operationId": "version",
+        "responses": {
+          "200": {
+            "description": "The deployed commit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "version": {"type": "string"}
+                  },
+                  "required": ["version"]
+                },
+                "example": {"version": "fa7d74dc9537373fb36a7bef0d29cdaf4e83b897"}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/get_normalized_nodes": {
+      "get": {
+        "summary": "Get the equivalent identifiers and semantic types for the curie(s) entered.",
+        "tags": ["translator"],
+        "description": "Returns the equivalent identifiers and semantic types for the curie(s). Each input CURIE maps to a normalized node, or to `null` if it is unknown.",
+        "operationId": "get_normalized_nodes_get",
+        "parameters": [
+          {
+            "name": "curie",
+            "in": "query",
+            "description": "List of curies to normalize",
+            "required": true,
+            "schema": {
+              "type": "array",
+              "items": {"type": "string"},
+              "minItems": 1
+            },
+            "example": ["MESH:D014867", "NCIT:C34373"]
+          },
+          {
+            "name": "conflate",
+            "in": "query",
+            "description": "Whether to apply gene/protein conflation",
+            "required": false,
+            "schema": {"type": "boolean", "default": true}
+          },
+          {
+            "name": "drug_chemical_conflate",
+            "in": "query",
+            "description": "Whether to apply drug/chemical conflation",
+            "required": false,
+            "schema": {"type": "boolean", "default": false}
+          },
+          {
+            "name": "description",
+            "in": "query",
+            "description": "Whether to return curie descriptions when possible",
+            "required": false,
+            "schema": {"type": "boolean", "default": false}
+          },
+          {
+            "name": "individual_types",
+            "in": "query",
+            "description": "Whether to return individual types for equivalent identifiers",
+            "required": false,
+            "schema": {"type": "boolean", "default": false}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A normalized node (or `null`) for every input CURIE",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/NormalizedNodes"},
+                "examples": {"default": {"$ref": "#/components/examples/NormalizedNodes"}}
+              }
+            }
+          },
+          "400": {
+            "description": "No `curie` parameter was supplied"
+          }
+        }
+      },
+      "post": {
+        "summary": "Get the equivalent identifiers and semantic types for the curie(s) entered.",
+        "tags": ["translator"],
+        "description": "Returns the equivalent identifiers and semantic types for the curie(s). Use the `conflate` and `drug_chemical_conflate` flags to choose which conflations to apply.",
+        "operationId": "get_normalized_nodes_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {"$ref": "#/components/schemas/CurieList"}
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A normalized node (or `null`) for every input CURIE",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/NormalizedNodes"},
+                "examples": {"default": {"$ref": "#/components/examples/NormalizedNodes"}}
+              }
+            }
+          },
+          "400": {
+            "description": "The body has no `curies`"
+          }
+        }
+      }
+    },
+    "/get_setid": {
+      "get": {
+        "summary": "Normalize and deduplicate a set of identifiers and return a single hash that represents this set.",
+        "tags": ["translator"],
+        "description": "Returns the set ID for a given set of CURIEs. A set ID is an identifier that can be used to identify this set of CURIEs going forward. It is currently impossible to recreate a set of CURIEs from a set ID, but the same set of CURIEs given to the same version of Node Normalization will always return the same set ID.",
+        "operationId": "get_setid_get",
+        "parameters": [
+          {
+            "name": "curie",
+            "in": "query",
+            "description": "Set of curies to normalize",
+            "required": true,
+            "schema": {
+              "type": "array",
+              "items": {"type": "string"},
+              "minItems": 1
+            },
+            "example": ["MESH:D014867", "NCIT:C34373", "UNII:63M8RYN44N", "RUBBISH:1234"]
+          },
+          {
+            "name": "conflation",
+            "in": "query",
+            "description": "Set of conflations to apply; see /get_allowed_conflations",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {"type": "string"},
+              "default": []
+            },
+            "example": ["GeneProtein", "DrugChemical"]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The set ID for the input CURIEs",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/SetIDResponse"}
+              }
+            }
+          },
+          "400": {
+            "description": "No `curie` parameter was supplied"
+          }
+        }
+      },
+      "post": {
+        "summary": "Normalize and deduplicate several sets of identifiers and return a hash for each set.",
+        "tags": ["translator"],
+        "description": "Returns one set ID per input set, in the order the sets were given.",
+        "operationId": "get_setid_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {"$ref": "#/components/schemas/SetIDQuery"},
+                "minItems": 1
+              },
+              "example": [
+                {"curies": ["MESH:D014867", "NCIT:C34373"]},
+                {
+                  "curies": ["NCIT:C34373", "MESH:D014867", "UNII:63M8RYN44N", "RUBBISH:1234"],
+                  "conflations": ["GeneProtein", "DrugChemical"]
+                }
+              ]
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "One set ID per input set",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {"$ref": "#/components/schemas/SetIDResponse"}
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The body is not a non-empty JSON array"
+          }
+        }
+      }
+    },
+    "/get_semantic_types": {
+      "get": {
+        "summary": "Return a list of Biolink semantic types for which normalization has been attempted.",
+        "tags": ["metadata"],
+        "description": "Returns the distinct Biolink classes found in the index, together with all of their ancestors.",
+        "operationId": "get_semantic_types",
+        "responses": {
+          "200": {
+            "description": "The semantic types in this instance",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/SemanticTypes"},
+                "example": {
+                  "semantic_types": {
+                    "types": [
+                      "biolink:NamedThing",
+                      "biolink:ChemicalEntity",
+                      "biolink:SmallMolecule",
+                      "biolink:Disease",
+                      "biolink:Gene",
+                      "biolink:Protein"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/get_allowed_conflations": {
+      "get": {
+        "summary": "Return a list of named conflations.",
+        "tags": ["metadata"],
+        "description": "Returns the conflations this instance can apply. Conflation combines cliques on the fly: <ol> <li><code>GeneProtein</code> merges protein-coding genes with the proteins they encode. The gene(s) always appear first in the combined clique. <li><code>DrugChemical</code> merges chemicals based on their active ingredient. The active ingredient appears before any formulations in the combined clique. </ol> You can <a href=\"https://github.com/NCATSTranslator/Babel/blob/main/docs/Conflation.md\">read more about conflation</a> in the Babel documentation.",
+        "operationId": "get_allowed_conflations",
+        "responses": {
+          "200": {
+            "description": "The conflations this instance supports",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/ConflationList"},
+                "example": {"conflations": ["GeneProtein", "DrugChemical"]}
+              }
+            }
+          }
+        }
+      }
     }
-  ]
+  },
+  "components": {
+    "schemas": {
+      "CurieList": {
+        "title": "CurieList",
+        "description": "Curie list input model",
+        "type": "object",
+        "required": ["curies"],
+        "properties": {
+          "curies": {
+            "title": "List of CURIEs to normalize",
+            "type": "array",
+            "items": {"type": "string"},
+            "minItems": 1
+          },
+          "conflate": {
+            "title": "Whether to apply gene/protein conflation",
+            "type": "boolean",
+            "default": true
+          },
+          "drug_chemical_conflate": {
+            "title": "Whether to apply drug/chemical conflation",
+            "type": "boolean",
+            "default": false
+          },
+          "description": {
+            "title": "Whether to return CURIE descriptions when possible",
+            "type": "boolean",
+            "default": false
+          },
+          "individual_types": {
+            "title": "Whether to return individual types for equivalent identifiers",
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "example": {
+          "curies": ["MESH:D014867", "NCIT:C34373"],
+          "conflate": true,
+          "drug_chemical_conflate": false,
+          "description": false,
+          "individual_types": false
+        }
+      },
+      "Identifier": {
+        "title": "Identifier",
+        "description": "A CURIE with its label, and optionally its description and Biolink type",
+        "type": "object",
+        "required": ["identifier"],
+        "properties": {
+          "identifier": {"type": "string"},
+          "label": {"type": "string"},
+          "description": {"type": "string", "description": "Only when `description` was requested"},
+          "type": {"type": "string", "description": "Only when `individual_types` was requested"}
+        }
+      },
+      "NormalizedNode": {
+        "title": "NormalizedNode",
+        "description": "The clique an input CURIE belongs to",
+        "type": "object",
+        "required": ["id", "equivalent_identifiers", "type", "taxa"],
+        "properties": {
+          "id": {
+            "description": "The preferred identifier for this clique",
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "equivalent_identifiers": {
+            "type": "array",
+            "items": {"$ref": "#/components/schemas/Identifier"}
+          },
+          "type": {
+            "description": "Biolink classes for this clique, most specific first",
+            "type": "array",
+            "items": {"type": "string"}
+          },
+          "information_content": {
+            "type": "number",
+            "description": "Omitted when Babel has no information content for this clique"
+          },
+          "descriptions": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Only when `description` was requested"
+          },
+          "taxa": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "NCBITaxon CURIEs this clique is associated with"
+          }
+        }
+      },
+      "NormalizedNodes": {
+        "title": "NormalizedNodes",
+        "description": "One normalized node per input CURIE, keyed by the input CURIE; `null` when the CURIE is unknown",
+        "type": "object",
+        "additionalProperties": {
+          "oneOf": [
+            {"$ref": "#/components/schemas/NormalizedNode"},
+            {"type": "null"}
+          ]
+        }
+      },
+      "SetIDQuery": {
+        "title": "SetIDQuery",
+        "type": "object",
+        "required": ["curies"],
+        "properties": {
+          "curies": {
+            "title": "Set of CURIEs",
+            "type": "array",
+            "items": {"type": "string"},
+            "minItems": 1
+          },
+          "conflations": {
+            "title": "Conflations to apply; see /get_allowed_conflations",
+            "type": "array",
+            "items": {"type": "string"},
+            "default": []
+          }
+        }
+      },
+      "SetIDResponse": {
+        "title": "SetIDResponse",
+        "type": "object",
+        "required": ["curies", "conflations", "error", "normalized_curies", "normalized_string", "setid"],
+        "properties": {
+          "curies": {"type": "array", "items": {"type": "string"}},
+          "conflations": {"type": "array", "items": {"type": "string"}},
+          "error": {"type": ["string", "null"], "description": "Set when the conflations are not all allowed"},
+          "normalized_curies": {
+            "type": ["array", "null"],
+            "items": {"type": "string"},
+            "description": "The preferred identifiers, deduplicated and sorted; unknown CURIEs pass through unchanged"
+          },
+          "normalized_string": {"type": ["string", "null"], "description": "`normalized_curies` joined with `||`"},
+          "setid": {"type": ["string", "null"], "description": "UUID v5 of `normalized_string`, prefixed `uuid:`"}
+        },
+        "example": {
+          "curies": ["MESH:D014867", "NCIT:C34373", "UNII:63M8RYN44N", "RUBBISH:1234"],
+          "conflations": ["GeneProtein", "DrugChemical"],
+          "error": null,
+          "normalized_curies": ["CHEBI:15377", "MONDO:0004976", "RUBBISH:1234"],
+          "normalized_string": "CHEBI:15377||MONDO:0004976||RUBBISH:1234",
+          "setid": "uuid:771d3c09-9a8c-5c46-8b85-97f481a90d40"
+        }
+      },
+      "SemanticTypes": {
+        "title": "SemanticTypes",
+        "type": "object",
+        "required": ["semantic_types"],
+        "properties": {
+          "semantic_types": {
+            "type": "object",
+            "required": ["types"],
+            "properties": {
+              "types": {
+                "type": "array",
+                "items": {"type": "string"}
+              }
+            }
+          }
+        }
+      },
+      "ConflationList": {
+        "title": "ConflationList",
+        "type": "object",
+        "required": ["conflations"],
+        "properties": {
+          "conflations": {
+            "type": "array",
+            "items": {"type": "string"}
+          }
+        }
+      }
+    },
+    "examples": {
+      "NormalizedNodes": {
+        "summary": "Water, ALS and an unknown CURIE, with descriptions and individual types requested",
+        "value": {
+          "MESH:D014867": {
+            "id": {
+              "identifier": "CHEBI:15377",
+              "label": "Water",
+              "description": "An oxygen hydride consisting of an oxygen atom that is covalently bonded to two hydrogen atoms"
+            },
+            "descriptions": [
+              "An oxygen hydride consisting of an oxygen atom that is covalently bonded to two hydrogen atoms"
+            ],
+            "equivalent_identifiers": [
+              {
+                "identifier": "CHEBI:15377",
+                "label": "water",
+                "description": "An oxygen hydride consisting of an oxygen atom that is covalently bonded to two hydrogen atoms",
+                "type": "biolink:SmallMolecule"
+              },
+              {
+                "identifier": "CHEBI:44701",
+                "label": "",
+                "type": "biolink:SmallMolecule"
+              }
+            ],
+            "type": [
+              "biolink:SmallMolecule",
+              "biolink:MolecularEntity",
+              "biolink:OntologyClass",
+              "biolink:ChemicalEntity",
+              "biolink:PhysicalEssence",
+              "biolink:ChemicalOrDrugOrTreatment",
+              "biolink:ChemicalEntityOrGeneOrGeneProduct",
+              "biolink:ChemicalEntityOrProteinOrPolypeptide",
+              "biolink:NamedThing",
+              "biolink:PhysicalEssenceOrOccurrent"
+            ],
+            "information_content": 47.5,
+            "taxa": []
+          },
+          "NCIT:C34373": {
+            "id": {
+              "identifier": "MONDO:0004976",
+              "label": "amyotrophic lateral sclerosis",
+              "description": "Amyotrophic lateral sclerosis (ALS) is a neurodegenerative disease characterized by progressive muscular paralysis reflecting degeneration of motor neurons in the primary motor cortex, corticospinal tracts, brainstem and spinal cord."
+            },
+            "descriptions": [
+              "Amyotrophic lateral sclerosis (ALS) is a neurodegenerative disease characterized by progressive muscular paralysis reflecting degeneration of motor neurons in the primary motor cortex, corticospinal tracts, brainstem and spinal cord."
+            ],
+            "equivalent_identifiers": [
+              {
+                "identifier": "MONDO:0004976",
+                "label": "amyotrophic lateral sclerosis",
+                "description": "Amyotrophic lateral sclerosis (ALS) is a neurodegenerative disease characterized by progressive muscular paralysis reflecting degeneration of motor neurons in the primary motor cortex, corticospinal tracts, brainstem and spinal cord.",
+                "type": "biolink:Disease"
+              },
+              {
+                "identifier": "DOID:332",
+                "label": "amyotrophic lateral sclerosis",
+                "type": "biolink:Disease"
+              }
+            ],
+            "type": [
+              "biolink:Disease",
+              "biolink:DiseaseOrPhenotypicFeature",
+              "biolink:OntologyClass",
+              "biolink:BiologicalEntity",
+              "biolink:ThingWithTaxon",
+              "biolink:NamedThing"
+            ],
+            "information_content": 74.9,
+            "taxa": []
+          },
+          "RUBBISH:1234": null
+        }
+      }
+    }
+  }
 }
