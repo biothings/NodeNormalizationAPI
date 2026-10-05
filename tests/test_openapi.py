@@ -12,6 +12,7 @@ import importlib.resources
 import inspect
 import json
 import re
+from types import SimpleNamespace
 
 import jsonschema
 import tornado.web
@@ -21,7 +22,9 @@ from tornado.testing import AsyncHTTPTestCase
 import nodenorm
 from nodenorm.handlers import build_handlers
 from nodenorm.handlers.base import NodeNormalizationBaseHandler
+from nodenorm.handlers import set_identifiers
 from nodenorm.handlers.conflations import ValidConflationsHandler
+from nodenorm.handlers.semantic_types import SemanticTypeHandler
 from nodenorm.handlers.set_identifiers import SetIDResponse
 
 SPEC = json.loads((importlib.resources.files(nodenorm) / "webapp" / "openapi.json").read_text(encoding="utf-8"))
@@ -74,3 +77,57 @@ class TestAllowedConflations(AsyncHTTPTestCase):
         body = json.loads(response.body)
         jsonschema.validate(body, SPEC["components"]["schemas"]["ConflationList"])
         assert {"GeneProtein", "DrugChemical"} <= set(body["conflations"])
+
+
+class FakeElasticsearch:
+    """Just enough of AsyncElasticsearch for the semantic-types aggregation."""
+
+    async def search(self, **kwargs):
+        return SimpleNamespace(body={"aggregations": {"unique_types": {"buckets": [{"key": "biolink:Disease"}]}}})
+
+
+class TestSemanticTypes(AsyncHTTPTestCase):
+    """Regression: the handler lower-cased every class ("biolink:namedthing")."""
+
+    def get_app(self) -> tornado.web.Application:
+        app = tornado.web.Application([(r"/get_semantic_types", SemanticTypeHandler)])
+        app.biothings = SimpleNamespace(
+            elasticsearch=SimpleNamespace(indices="nodenorm", async_client=FakeElasticsearch())
+        )
+        return app
+
+    def test_types_are_biolink_class_curies(self):
+        response = self.fetch("/get_semantic_types")
+
+        assert response.code == 200
+        body = json.loads(response.body)
+        jsonschema.validate(body, SPEC["components"]["schemas"]["SemanticTypes"])
+        types = body["semantic_types"]["types"]
+        assert "biolink:Disease" in types and "biolink:NamedThing" in types
+        assert all(re.fullmatch(r"biolink:[A-Z][A-Za-z]*", t) for t in types), types
+
+
+class TestSetIdentifierPost(AsyncHTTPTestCase):
+    """Regression: POST returned an index-keyed object because Tornado refuses to write a list."""
+
+    def get_app(self) -> tornado.web.Application:
+        async def fake_generate_setid(biothings, curies, conflations):
+            return dataclasses.asdict(
+                SetIDResponse(curies=curies, conflations=conflations, normalized_curies=sorted(curies))
+            )
+
+        set_identifiers.generate_setid = fake_generate_setid
+        app = tornado.web.Application([(r"/get_setid", set_identifiers.SetIdentifierHandler)])
+        app.biothings = None
+        return app
+
+    def test_returns_one_response_per_set_as_a_list(self):
+        sets = [{"curies": ["MESH:D014867"]}, {"curies": ["NCIT:C34373"], "conflations": ["GeneProtein"]}]
+        response = self.fetch("/get_setid", method="POST", body=json.dumps(sets))
+
+        assert response.code == 200
+        assert response.headers["Content-Type"].startswith("application/json")
+        body = json.loads(response.body)
+        assert isinstance(body, list) and [r["curies"] for r in body] == [s["curies"] for s in sets]
+        for result in body:
+            jsonschema.validate(result, SPEC["components"]["schemas"]["SetIDResponse"])
