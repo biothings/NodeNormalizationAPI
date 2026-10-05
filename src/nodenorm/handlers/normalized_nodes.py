@@ -76,7 +76,7 @@ class NormalizedNodesHandler(NodeNormalizationBaseHandler):
 
         Example body
         {
-          "curie": [
+          "curies": [
             "MESH:D014867",
             "NCIT:C34373"
           ]

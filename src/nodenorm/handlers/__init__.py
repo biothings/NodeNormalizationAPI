@@ -45,5 +45,9 @@ def build_handlers() -> dict[str, tuple[str, Callable]]:
     favicon_handler = (r"/favicon.ico", tornado.web.RedirectHandler, {"url": "/webapp/swaggerui/favicon-32x32.png"})
     handler_collection.append(favicon_handler)
 
+    # NodeNorm Redis (FastAPI) serves its OpenAPI document at the root; keep that address working
+    openapi_handler = (r"/openapi.json", tornado.web.RedirectHandler, {"url": "/webapp/openapi.json"})
+    handler_collection.append(openapi_handler)
+
     handlers = {handler[0]: handler for handler in handler_collection}
     return handlers

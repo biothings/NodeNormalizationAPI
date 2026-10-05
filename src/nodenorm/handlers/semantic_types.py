@@ -33,7 +33,7 @@ class SemanticTypeHandler(NodeNormalizationBaseHandler):
             biolink_type = bucket["key"]
             semantic_types.add(biolink_type)
             for ancestor in toolkit.get_ancestors(biolink_type):
-                semantic_types.add(toolkit.get_element(ancestor)["class_uri"].lower())
+                semantic_types.add(toolkit.get_element(ancestor)["class_uri"])
 
         semantic_type_response = {"semantic_types": {"types": list(semantic_types)}}
         self.finish(semantic_type_response)
