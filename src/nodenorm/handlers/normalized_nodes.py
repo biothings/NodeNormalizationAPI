@@ -2,7 +2,7 @@ import dataclasses
 import json
 import logging
 import time
-from typing import Union
+from typing import Optional, Union
 
 from tornado.web import HTTPError
 
@@ -296,6 +296,42 @@ async def create_normalized_node(
     return normal_node
 
 
+def _unresolved_node(curie: str) -> NormalizedNode:
+    return NormalizedNode(
+        curie=curie,
+        canonical_identifier=None,
+        preferred_label=None,
+        information_content=-1.0,
+        identifiers=[],
+        types=[],
+        taxa=[],
+    )
+
+
+def _has_invalid_source_type(result: dict, input_curie: str, stage: str) -> bool:
+    biolink_type = result.get("_source", {}).get("type")
+    # Missing types retain the existing NamedThing fallback. A stored clique
+    # must otherwise have one scalar type, even when conflation is requested.
+    if biolink_type is None or isinstance(biolink_type, str):
+        return False
+
+    logger.error(
+        "invalid_source_type: input_curie=%s document_id=%s stage=%s source_type=%r; returning null",
+        input_curie,
+        result.get("_id"),
+        stage,
+        biolink_type,
+        extra={
+            "error_code": "invalid_source_type",
+            "input_curie": input_curie,
+            "document_id": result.get("_id"),
+            "source_type": biolink_type,
+            "stage": stage,
+        },
+    )
+    return True
+
+
 async def _lookup_curie_metadata(
     biothings_metadata: NodeNormalizationAPINamespace, curies: list[str], conflations: dict
 ) -> list[NormalizedNode]:
@@ -311,18 +347,13 @@ async def _lookup_curie_metadata(
     nodes = []
     for input_curie in curies:
         if input_curie in malformed_curies:
-            node = NormalizedNode(
-                curie=input_curie,
-                canonical_identifier=None,
-                preferred_label=None,
-                information_content=-1.0,
-                identifiers=[],
-                types=[],
-                taxa=[],
-            )
-            nodes.append(node)
+            nodes.append(_unresolved_node(input_curie))
         else:
             result = identifier_result_lookup[input_curie]
+            if _has_invalid_source_type(result, input_curie, "base"):
+                nodes.append(_unresolved_node(input_curie))
+                continue
+
             result_source = result.get("_source", {})
             identifiers = result_source.get("identifiers", [])
             biolink_type = result_source.get("type", None)
@@ -370,6 +401,7 @@ async def _lookup_curie_metadata(
                 replacement_types = []
                 skipped_conflation_curies = []
                 conflation_label_discovered = False
+                invalid_conflation = False
                 for conflation_curie in conflation_identifiers:
                     if conflation_curie in malformed_conflation_curies:
                         skipped_conflation_curies.append(conflation_curie)
@@ -380,7 +412,11 @@ async def _lookup_curie_metadata(
                         skipped_conflation_curies.append(conflation_curie)
                         continue
 
-                    conflation_biolink_type = conflation_result.get("_source", {}).get("type", [])
+                    if _has_invalid_source_type(conflation_result, input_curie, "conflation"):
+                        invalid_conflation = True
+                        break
+
+                    conflation_biolink_type = conflation_result.get("_source", {}).get("type")
                     conflation_identifier_lookup = conflation_result.get("_source", {}).get("identifiers", [])
                     if not conflation_identifier_lookup:
                         skipped_conflation_curies.append(conflation_curie)
@@ -400,6 +436,12 @@ async def _lookup_curie_metadata(
                     if conflation_preferred_label is not None and not conflation_label_discovered:
                         preferred_label = conflation_preferred_label
                         conflation_label_discovered = True
+
+                if invalid_conflation:
+                    # Do not return a partial conflation or hide a corrupt
+                    # dependency by falling back to the base clique.
+                    nodes.append(_unresolved_node(input_curie))
+                    continue
 
                 replacement_types = unique_list(replacement_types)
 
@@ -451,31 +493,25 @@ async def _lookup_curie_metadata(
     return nodes
 
 
-async def _populate_biolink_type_ancestors(biolink_type: Union[str, list[str]], canonical_identifier: str) -> list[str]:
-    if not isinstance(biolink_type, list):
-        biolink_type = [biolink_type]
+async def _populate_biolink_type_ancestors(biolink_type: Optional[str], canonical_identifier: str) -> list[str]:
+    if biolink_type is not None and not isinstance(biolink_type, str):
+        raise TypeError(f"Expected a scalar Biolink type for {canonical_identifier}, got {type(biolink_type).__name__}")
 
-    biolink_type_tree = []
-    for bltype in biolink_type:
-        if not bltype:
-            fallback_type = "biolink:NamedThing"
-            logging.error(
-                "No type information found for '%s'. Default type set to -> '%s'",
-                canonical_identifier,
-                fallback_type,
-            )
-            biolink_type_tree.append(fallback_type)
-        else:
-            for anc in toolkit.get_ancestors(bltype):
-                biolink_type_tree.append(toolkit.get_element(anc)["class_uri"])
+    if not biolink_type:
+        fallback_type = "biolink:NamedThing"
+        logging.error(
+            "No type information found for '%s'. Default type set to -> '%s'",
+            canonical_identifier,
+            fallback_type,
+        )
+        return [fallback_type]
+
+    biolink_type_tree = [toolkit.get_element(anc)["class_uri"] for anc in toolkit.get_ancestors(biolink_type)]
 
     # We need to remove `biolink:Entity` from the types returned.
     # (See explanation at https://github.com/TranslatorSRI/NodeNormalization/issues/173)
-    try:
-        biolink_type_tree.remove("biolink:Entity")
-    except ValueError:
-        pass
-    return biolink_type_tree
+    # Preserve first-seen order because clients use the first type as primary.
+    return unique_list(ancestor for ancestor in biolink_type_tree if ancestor != "biolink:Entity")
 
 
 def unique_list(seq) -> list:
