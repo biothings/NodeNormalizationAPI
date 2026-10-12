@@ -25,6 +25,8 @@ class NodeNormalizationAPI(TornadoBiothingsAPI):
         handlers = build_handlers()
         namespace.populate_handlers(handlers)
         settings = namespace.config.webserver["SETTINGS"]
-        app = cls(handlers.values(), settings)
+        # As keywords: Application's second positional parameter is default_host, where these
+        # settings used to land unused, so debug and autoreload never took effect.
+        app = cls(handlers.values(), **settings)
         app.biothings = namespace
         return app

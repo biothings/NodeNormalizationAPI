@@ -18,6 +18,21 @@ import nodenorm
 logger = logging.getLogger(__name__)
 
 
+def merge_configuration(base: dict, override: dict) -> dict:
+    """Overlay one configuration on another, recursing into nested sections.
+
+    An override file then only needs the keys it changes: {"elasticsearch": {"ES_HOST": ...}}
+    replaces ES_HOST and keeps the rest of the section. Lists and other values are replaced whole.
+    """
+    merged = dict(base)
+    for key, value in override.items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = merge_configuration(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
+
+
 class NodeNormalizationAPINamespace:
     """Simplied namespace instance for our NodeNormalization API."""
 
@@ -196,33 +211,24 @@ class NodeNormalizationAPINamespace:
         Loads the default configuration file found in ~/src/nodenorm/config/config.default.json
         to create a base structure. It then checks if an optional configuration file was provided
         via the command line options. We override the default configuration file with this option
-        based file. After that, we setup our static path structure for loading the webapp containing
-        our swaggerui frontend. We check any other command line options and then return our
-        configuration data structure
+        based file, merging nested sections key by key (see merge_configuration). We then check
+        any other command line options and return our configuration data structure
         """
-        configuration = {}
-
         # note we have to use this format as relative paths were only supported for
         # importlib.resources.read_text in python3.13
         default_configuration_path = importlib.resources.files(nodenorm) / "config" / self.default_configuration
         with default_configuration_path.open("r", encoding="utf-8") as handle:
-            default_configuration = json.load(handle)
-
-        configuration.update(default_configuration)
+            configuration = json.load(handle)
 
         optional_configuration_file = getattr(option_configuration, "conf", None)
         if optional_configuration_file is not None:
             optional_configuration = pathlib.Path(optional_configuration_file).absolute().resolve()
             if optional_configuration.exists():
                 with open(optional_configuration, "r", encoding="utf-8") as handle:
-                    configuration.update(json.load(handle))
+                    configuration = merge_configuration(configuration, json.load(handle))
 
-        # Force the static path to the webapp directory
-        package_directory = importlib.resources.files(nodenorm)
-        webapp_directory = package_directory.joinpath("webapp")
-        configuration["webserver"]["SETTINGS"]["static_path"] = str(webapp_directory)
-        configuration["webserver"]["SETTINGS"]["static_url_prefix"] = "/"
-
+        # build_handlers() serves / and /webapp/ itself. Don't set Tornado's static_path here: with
+        # a static_url_prefix of "/", Tornado adds a catch-all route ahead of every API handler.
         configuration_namespace = types.SimpleNamespace(**configuration)
 
         # override options

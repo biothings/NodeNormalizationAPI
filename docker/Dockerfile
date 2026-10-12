@@ -24,16 +24,17 @@ COPY --from=builder --chown=nodenorm:nodenorm /build/wheels /home/nodenorm/wheel
 RUN /home/nodenorm/venv/bin/pip install /home/nodenorm/wheels/*.whl && rm -rf /home/nodenorm/wheels
 
 WORKDIR /home/nodenorm/configuration
-COPY --from=builder --chown=nodenorm:nodenorm /build/nodenorm/src/nodenorm/config/config.default.json /home/nodenorm/configuration/default.json
 COPY --from=builder --chown=nodenorm:nodenorm /build/nodenorm/version.txt /home/nodenorm/configuration/version.txt
 
-# Override with corrected configuration
-COPY --chown=nodenorm:nodenorm configuration/config.json /home/nodenorm/configuration/config.json
+# The configuration comes from the same clone as the code, not from the build context, so the
+# two always match (config.json relies on the code's section-by-section merge) and the image
+# builds the same from any context. It is laid over the packaged config.default.json.
+COPY --from=builder --chown=nodenorm:nodenorm /build/nodenorm/docker/configuration/config.json /home/nodenorm/configuration/config.json
 
 # Switch back to root for system-level operations
 USER root
-COPY configuration/supervisord.conf /etc/supervisor/supervisord.conf
-COPY configuration/Caddyfile /etc/caddy/Caddyfile
+COPY --from=builder /build/nodenorm/docker/configuration/supervisord.conf /etc/supervisor/supervisord.conf
+COPY --from=builder /build/nodenorm/docker/configuration/Caddyfile /etc/caddy/Caddyfile
 COPY --from=caddy_builder /usr/bin/caddy /usr/bin/caddy
 # Switch back to nodenorm user for runtime
 USER nodenorm

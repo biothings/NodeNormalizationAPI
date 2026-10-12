@@ -1,33 +1,17 @@
 {
     "webserver": {
-        "HOST": "localhost",
-        "PORT": 8000,
-        "ENABLE_CURL_CLIENT": true,
         "SETTINGS": {
-            "debug": true,
-            "autoreload": true
+            "debug": false,
+            "autoreload": false
         }
-    },
-    "api": {
-        "API_PREFIX": "nodenorm",
-        "API_VERSION": ""
     },
     "elasticsearch": {
         "ES_HOST": "http://elasticsearch.es-core-components.svc.cluster.local:9200",
         "ES_INDEX": "annotator-nodenorm",
-        "ES_ALIAS": "annotator-nodenorm", 
-        "ES_DOC_TYPE": "node",
-        "ES_INDICES": {},
-        "ES_ARGS": {
-            "sniff": false,
-            "request_timeout": 60
-        }
+        "ES_ALIAS": "annotator-nodenorm"
     },
     "telemetry": {
         "OPENTELEMETRY_ENABLED": true,
-        "OPENTELEMETRY_SERVICE_NAME": "NodeNorm",
-        "OPENTELEMETRY_JAEGER_HOST": "http://jaeger-otel-collector.sri",
-        "OPENTELEMETRY_JAEGER_PORT": 4318,
-        "OPENTELEMETRY_EXCLUDED_URLS": ["^/$", "^/status$", "^/version$", "^/webapp", "^/favicon\\.ico$"]
+        "OPENTELEMETRY_JAEGER_HOST": "http://jaeger-otel-collector.sri"
     }
 }

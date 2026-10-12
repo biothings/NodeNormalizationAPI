@@ -28,3 +28,18 @@ https://github.com/biothings/biothings_explorer/blob/main/docs/README-maintainin
 The documentation is maintained at the [biothings_explorer](https://github.com/biothings/biothings_explorer) repository,
 as each knowledgebase API will be integrated into the [BioThings Explorer application](https://explorer.biothings.io) become
 a Translator's standard KP (Knowledge Provider) API.
+
+## Configuration
+
+Settings are read from `src/nodenorm/config/config.default.json`, which is set up for local
+development (Elasticsearch on localhost, Tornado debug mode on, telemetry off). A file passed with
+`--conf` is laid over it section by section, so it only needs the keys it changes. The Docker image
+passes `docker/configuration/config.json`, which holds the deployment's own settings: the in-cluster
+Elasticsearch host, telemetry on, and debug mode off (in debug mode Tornado puts tracebacks in its
+error pages). It also repeats `ES_INDEX` and `ES_ALIAS`, though they match the default today: they
+name the index in the deployment's cluster, so pinning them means a change to the default for local
+development can't silently repoint production. The cost is that a rename has to be made in both
+files. Other settings the deployment leaves out follow the default, so a change there reaches
+production on the next build. `tests/test_configuration.py` checks that the deployment file names no
+setting the default lacks. The app reads none of these settings from environment variables, so the
+Helm chart doesn't set any.
