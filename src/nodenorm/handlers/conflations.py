@@ -1,17 +1,14 @@
-import logging
-
 from nodenorm.handlers.base import NodeNormalizationBaseHandler
 
-logger = logging.getLogger(__name__)
+ALLOWED_CONFLATIONS = ["GeneProtein", "DrugChemical"]
 
 
 class ValidConflationsHandler(NodeNormalizationBaseHandler):
     name = "allowed-conflations"
 
     async def get(self):
-        conflations = ["GeneProtein", "DrugChemical"]
-        self.finish(conflations)
+        # Wrapped in an object, as NodeNorm Redis does. Tornado also refuses to write a bare list.
+        self.finish({"conflations": ALLOWED_CONFLATIONS})
 
     async def head(self):
-        conflations = ["GeneProtein", "DrugChemical"]
-        self.finish(conflations)
+        await self.get()

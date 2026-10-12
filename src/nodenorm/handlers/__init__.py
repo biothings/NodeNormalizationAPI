@@ -42,8 +42,14 @@ def build_handlers() -> dict[str, tuple[str, Callable]]:
     handler_collection.append(index_handler)
 
     # This redirect ensures we default so the favicon icon can be found in the webapp directory
-    favicon_handler = (r"/favicon.ico", tornado.web.RedirectHandler, {"url": "/webapp/swaggerui/favicon-32x32.png"})
+    favicon_handler = (r"/favicon\.ico", tornado.web.RedirectHandler, {"url": "/webapp/swaggerui/favicon-32x32.png"})
     handler_collection.append(favicon_handler)
+
+    # The OpenAPI document is served at the root, where NodeNorm Redis (FastAPI) and most Translator
+    # services serve theirs. The asset handler above also serves it at /webapp/openapi.json, the
+    # address Babel Validation's targets and the Translator diagram are configured with.
+    openapi_handler = (r"/(openapi\.json)", tornado.web.StaticFileHandler, {"path": str(webapp_directory)})
+    handler_collection.append(openapi_handler)
 
     handlers = {handler[0]: handler for handler in handler_collection}
     return handlers
