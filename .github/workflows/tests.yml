@@ -1,0 +1,29 @@
+name: Tests
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          # The version the Docker image runs.
+          python-version: "3.12"
+          activate-environment: true
+      # Not `uv sync`/`uv run`: they resolve for every Python that requires-python allows, and
+      # fail on the telemetry extra's pins until requires-python is raised (#43).
+      - run: uv pip install -e ".[tests]"
+      # These two files query the Elasticsearch cluster at su10:9200, which GitHub can't reach.
+      # Everything else uses fake or unreachable clients, so new test files run here by default.
+      # Running them in CI needs a fixture index or a reachable test cluster; see #19.
+      - run: >-
+          pytest
+          --ignore=tests/test_normalized_nodes.py
+          --ignore=tests/test_set_identifiers.py
