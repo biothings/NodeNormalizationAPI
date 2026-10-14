@@ -1,5 +1,4 @@
 import dataclasses
-import json
 import logging
 import time
 from typing import Optional, Union
@@ -25,6 +24,25 @@ class NormalizedNode:
     taxa: list[str]
 
 
+# The strings FastAPI (Pydantic) accepted as booleans in NodeNorm Redis, which this API mirrors.
+TRUE_STRINGS = {"true", "1", "yes", "on", "t", "y"}
+FALSE_STRINGS = {"false", "0", "no", "off", "f", "n"}
+
+
+def parse_boolean(name: str, argument: Union[str, bool]) -> bool:
+    """Read a boolean flag, rejecting values that aren't clearly true or false with HTTP 400."""
+    if isinstance(argument, bool):
+        return argument
+    if isinstance(argument, str):
+        if argument.lower() in TRUE_STRINGS:
+            return True
+        if argument.lower() in FALSE_STRINGS:
+            return False
+    raise HTTPError(
+        detail=f"{name} must be true or false (or 1/0, yes/no, on/off, t/f, y/n), not {argument!r}", status_code=400
+    )
+
+
 class NormalizedNodesHandler(NodeNormalizationBaseHandler):
     """
     Mirror implementation to the renci implementation found at
@@ -42,17 +60,12 @@ class NormalizedNodesHandler(NodeNormalizationBaseHandler):
                 detail="Missing curie argument, there must be at least one curie to normalize", status_code=400
             )
 
-        def parse_boolean(argument: Union[str, bool]) -> bool:
-            if isinstance(argument, bool):
-                return argument
-            if isinstance(argument, str):
-                return not argument.lower() == "false"
-            return False
-
-        conflate = parse_boolean(self.get_argument("conflate", True))
-        drug_chemical_conflate = parse_boolean(self.get_argument("drug_chemical_conflate", False))
-        description = parse_boolean(self.get_argument("description", False))
-        individual_types = parse_boolean(self.get_argument("individual_types", False))
+        conflate = parse_boolean("conflate", self.get_argument("conflate", True))
+        drug_chemical_conflate = parse_boolean(
+            "drug_chemical_conflate", self.get_argument("drug_chemical_conflate", False)
+        )
+        description = parse_boolean("description", self.get_argument("description", False))
+        individual_types = parse_boolean("individual_types", self.get_argument("individual_types", False))
 
         normalized_nodes = await get_normalized_nodes(
             self.biothings,
@@ -76,7 +89,7 @@ class NormalizedNodesHandler(NodeNormalizationBaseHandler):
 
         Example body
         {
-          "curie": [
+          "curies": [
             "MESH:D014867",
             "NCIT:C34373"
           ]
@@ -132,17 +145,21 @@ class NormalizedNodesHandler(NodeNormalizationBaseHandler):
           }
         }
         """
-        post_body: dict = json.loads(self.request.body)
+        post_body: dict = self.load_json_body()
+        if not isinstance(post_body, dict):
+            raise HTTPError(
+                detail='The body must be a JSON object, such as {"curies": ["MESH:D014867"]}', status_code=400
+            )
         normalization_curies = post_body.get("curies", [])
         if len(normalization_curies) == 0:
             raise HTTPError(
                 detail="Missing curie argument, there must be at least one curie to normalize", status_code=400
             )
 
-        conflate = post_body.get("conflate", True)
-        drug_chemical_conflate = post_body.get("drug_chemical_conflate", False)
-        description = post_body.get("description", False)
-        individual_types = post_body.get("individual_types", False)
+        conflate = parse_boolean("conflate", post_body.get("conflate", True))
+        drug_chemical_conflate = parse_boolean("drug_chemical_conflate", post_body.get("drug_chemical_conflate", False))
+        description = parse_boolean("description", post_body.get("description", False))
+        individual_types = parse_boolean("individual_types", post_body.get("individual_types", False))
 
         normalized_nodes = await get_normalized_nodes(
             self.biothings,
