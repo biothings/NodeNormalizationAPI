@@ -30,12 +30,16 @@ class NodeNormHealthHandler(NodeNormalizationBaseHandler):
         async_client: AsyncElasticsearch = self.biothings.elasticsearch.async_client
         search_indices = self.biothings.elasticsearch.indices
 
-        mapping_response = await async_client.indices.get_mapping(index=search_indices)
-        index_mapping = next(iter(mapping_response.values()))
-        babel_version = get_babel_version(index_mapping)
-        babel_version_url = get_babel_release_url(babel_version)
         version = get_openapi_version()
+        # Unknown until the index mapping has been read, so they stay None if the cluster is unreachable.
+        babel_version = None
+        babel_version_url = None
         try:
+            mapping_response = await async_client.indices.get_mapping(index=search_indices)
+            index_mapping = next(iter(mapping_response.values()))
+            babel_version = get_babel_version(index_mapping)
+            babel_version_url = get_babel_release_url(babel_version)
+
             attributes = [
                 "name",
                 "cpu",

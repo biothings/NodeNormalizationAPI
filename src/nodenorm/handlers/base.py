@@ -1,6 +1,9 @@
 """Shared handler behavior for NodeNormalization API endpoints."""
 
+import json
+
 from biothings.web.handlers import BaseHandler
+from tornado.web import HTTPError
 
 
 class NodeNormalizationBaseHandler(BaseHandler):
@@ -26,3 +29,13 @@ class NodeNormalizationBaseHandler(BaseHandler):
 
     def options(self, *args, **kwargs):
         self.finish()
+
+    def load_json_body(self):
+        """Parse the request body as JSON, answering 400 rather than 500 if it can't be.
+
+        json.loads() raises UnicodeDecodeError, not JSONDecodeError, for bytes that aren't valid UTF-8.
+        """
+        try:
+            return json.loads(self.request.body)
+        except (json.JSONDecodeError, UnicodeDecodeError) as error:
+            raise HTTPError(detail=f"The body is not valid JSON: {error}", status_code=400)
