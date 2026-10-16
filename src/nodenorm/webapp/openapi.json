@@ -30,7 +30,7 @@
       "get": {
         "summary": "Status information on this NodeNorm instance",
         "tags": ["health"],
-        "description": "Returns information about this NodeNorm instance and the elasticsearch instance backing it.",
+        "description": "Returns information about this NodeNorm instance and the elasticsearch instance backing it. Includes the configured default Babel release and supported release names. Existing babel_version and babel_version_url metadata describe the default release.",
         "operationId": "status",
         "responses": {
           "200": {
@@ -39,7 +39,30 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "title": "Response Status Get"
+                  "title": "Response Status Get",
+                  "properties": {
+                    "default_babel_version": {
+                      "type": "string",
+                      "description": "Babel release used when babel_version is omitted.",
+                      "example": "2025sep1"
+                    },
+                    "available_babel_versions": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "description": "Supported release names from the deployment configuration; this list does not indicate backend health.",
+                      "example": [
+                        "2025sep1",
+                        "2026jul22"
+                      ]
+                    },
+                    "babel_version": {
+                      "type": "string",
+                      "description": "Babel metadata for the configured default release.",
+                      "example": "2025sep1"
+                    }
+                  }
                 }
               }
             }
@@ -121,6 +144,9 @@
             },
             "name": "individual_types",
             "in": "query"
+          },
+          {
+            "$ref": "#/components/parameters/BabelVersion"
           }
         ],
         "responses": {
@@ -129,6 +155,11 @@
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            },
+            "headers": {
+              "X-Babel-Version": {
+                "$ref": "#/components/headers/BabelVersion"
               }
             }
           },
@@ -141,13 +172,19 @@
                 }
               }
             }
+          },
+          "400": {
+            "$ref": "#/components/responses/UnsupportedBabelVersion"
+          },
+          "500": {
+            "$ref": "#/components/responses/BabelReleaseUnavailable"
           }
         }
       },
       "post": {
         "summary": "Get the equivalent identifiers and semantic types for the curie(s) entered.",
         "tags": ["translator"],
-        "description": "Returns the equivalent identifiers and semantic types for the curie(s). Use the `conflate` flag to choose whether to apply conflation.",
+        "description": "Returns the equivalent identifiers and semantic types for the curie(s). Use the `conflate` flag to choose whether to apply conflation. Select a Babel release with the optional babel_version string in the JSON body. Omitting it uses the configured default release.",
         "operationId": "get_normalized_node_handler_post_get_normalized_nodes_post",
         "requestBody": {
           "content": {
@@ -166,6 +203,11 @@
               "application/json": {
                 "schema": {}
               }
+            },
+            "headers": {
+              "X-Babel-Version": {
+                "$ref": "#/components/headers/BabelVersion"
+              }
             }
           },
           "422": {
@@ -177,6 +219,12 @@
                 }
               }
             }
+          },
+          "400": {
+            "$ref": "#/components/responses/UnsupportedBabelVersion"
+          },
+          "500": {
+            "$ref": "#/components/responses/BabelReleaseUnavailable"
           }
         }
       }
@@ -227,6 +275,9 @@
             ],
             "name": "conflation",
             "in": "query"
+          },
+          {
+            "$ref": "#/components/parameters/BabelVersion"
           }
         ],
         "responses": {
@@ -237,6 +288,11 @@
                 "schema": {
                   "$ref": "#/components/schemas/SetIDResponse"
                 }
+              }
+            },
+            "headers": {
+              "X-Babel-Version": {
+                "$ref": "#/components/headers/BabelVersion"
               }
             }
           },
@@ -249,6 +305,12 @@
                 }
               }
             }
+          },
+          "400": {
+            "$ref": "#/components/responses/UnsupportedBabelVersion"
+          },
+          "500": {
+            "$ref": "#/components/responses/BabelReleaseUnavailable"
           }
         }
       },
@@ -304,6 +366,11 @@
                   "title": "Response Get Setid Get Setid Post"
                 }
               }
+            },
+            "headers": {
+              "X-Babel-Version": {
+                "$ref": "#/components/headers/BabelVersion"
+              }
             }
           },
           "422": {
@@ -315,8 +382,20 @@
                 }
               }
             }
+          },
+          "400": {
+            "$ref": "#/components/responses/UnsupportedBabelVersion"
+          },
+          "500": {
+            "$ref": "#/components/responses/BabelReleaseUnavailable"
           }
-        }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/BabelVersion"
+          }
+        ],
+        "description": "Select one Babel release for the entire batch using the optional babel_version query parameter. The JSON body remains an array of SetID queries."
       }
     },
     "/get_semantic_types": {
@@ -334,9 +413,25 @@
                   "$ref": "#/components/schemas/SemanticTypes"
                 }
               }
+            },
+            "headers": {
+              "X-Babel-Version": {
+                "$ref": "#/components/headers/BabelVersion"
+              }
             }
+          },
+          "400": {
+            "$ref": "#/components/responses/UnsupportedBabelVersion"
+          },
+          "500": {
+            "$ref": "#/components/responses/BabelReleaseUnavailable"
           }
-        }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/BabelVersion"
+          }
+        ]
       }
     },
     "/get_allowed_conflations": {
@@ -671,6 +766,12 @@
             "type": "boolean",
             "title": "Whether to return individual types for equivalent identifiers",
             "default": false
+          },
+          "babel_version": {
+            "type": "string",
+            "title": "Babel Version",
+            "description": "Supported Babel release name. Omit to use the configured default release; unknown, retired, or malformed values return HTTP 400 with the supported release names.",
+            "example": "2025sep1"
           }
         },
         "type": "object",
@@ -3177,6 +3278,35 @@
         ],
         "title": "sort_results_score",
         "description": "An enumeration."
+      }
+    },
+    "parameters": {
+      "BabelVersion": {
+        "name": "babel_version",
+        "in": "query",
+        "required": false,
+        "description": "Supported Babel release name. Omit to use the configured default release; unknown, retired, or malformed values return HTTP 400 with the supported release names.",
+        "schema": {
+          "type": "string"
+        },
+        "example": "2025sep1"
+      }
+    },
+    "headers": {
+      "BabelVersion": {
+        "description": "Babel release used for this response. Exposed to browser clients through Access-Control-Expose-Headers.",
+        "schema": {
+          "type": "string"
+        },
+        "example": "2025sep1"
+      }
+    },
+    "responses": {
+      "UnsupportedBabelVersion": {
+        "description": "Invalid request, including an unknown, retired, or malformed babel_version. Selector errors include the supported release names."
+      },
+      "BabelReleaseUnavailable": {
+        "description": "Processing failed or the selected supported Babel release is unavailable. Requests never fall back to a different release."
       }
     }
   },
