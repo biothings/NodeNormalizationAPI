@@ -41,7 +41,13 @@ def test_unknown_or_invalid_selector_lists_supported_releases(version):
         ("2025sep1", {"2025sep1": "index-*"}),
         ("2025sep1", {"2025sep1": "index-a,index-b"}),
         ("2025sep1", {"2025sep1": "index-?"}),
+        ("2025sep1", {"2025sep1": "_all"}),
+        ("2025sep1", {"2025sep1": " index "}),
         ("", {"": "index"}),
+        ("2025sep1\r\n", {"2025sep1\r\n": "index"}),
+        ("2025sep1\x00", {"2025sep1\x00": "index"}),
+        ("2025 sep1", {"2025 sep1": "index"}),
+        ("2025sep1é", {"2025sep1é": "index"}),
     ],
 )
 def test_invalid_release_configuration_is_rejected(default_version, releases):

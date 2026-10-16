@@ -17,9 +17,20 @@ class BabelReleases:
         if not isinstance(releases, dict) or not releases:
             raise ValueError("babel.releases must be a nonempty mapping of versions to indices or aliases")
         for version, index in releases.items():
-            if not isinstance(version, str) or not version.strip():
-                raise ValueError("Babel release names must be nonempty strings")
-            if not isinstance(index, str) or not index.strip() or any(char in index for char in "*,?"):
+            if (
+                not isinstance(version, str)
+                or not version
+                or not version.isascii()
+                or not version.isprintable()
+                or any(char.isspace() for char in version)
+            ):
+                raise ValueError("Babel release names must be nonempty ASCII strings without whitespace")
+            if (
+                not isinstance(index, str)
+                or not index
+                or index == "_all"
+                or any(char.isspace() or char in "*,?" for char in index)
+            ):
                 raise ValueError("Each Babel release must target one Elasticsearch index or alias")
         if not isinstance(default_version, str) or default_version not in releases:
             raise ValueError("babel.default_version must name a release in babel.releases")
