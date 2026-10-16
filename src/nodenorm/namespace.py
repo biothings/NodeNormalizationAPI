@@ -71,9 +71,18 @@ class NodeNormalizationAPINamespace:
         babel_configuration = getattr(self.config, "babel", {})
         if not isinstance(babel_configuration, dict):
             raise ValueError("babel configuration must be an object")
-        releases = None
+        supported_versions = None
+        default_version = None
         if babel_configuration:
-            releases = BabelReleases(babel_configuration.get("default_version"), babel_configuration.get("releases"))
+            if set(babel_configuration) - {"supported_versions", "default_version"}:
+                raise ValueError("babel configuration accepts supported_versions and optional default_version")
+            supported_versions = babel_configuration.get("supported_versions")
+            BabelReleases.validate_versions(supported_versions)
+            default_version = babel_configuration.get("default_version")
+            if "default_version" in babel_configuration and (
+                not isinstance(default_version, str) or default_version not in supported_versions
+            ):
+                raise ValueError("babel.default_version must name a release in babel.supported_versions")
 
         elasticsearch_namespace.client = connections.es.get_client(
             elasticsearch_configuration["ES_HOST"], **elasticsearch_configuration["ES_ARGS"]
@@ -81,18 +90,27 @@ class NodeNormalizationAPINamespace:
         elasticsearch_namespace.async_client = connections.es.get_async_client(
             elasticsearch_configuration["ES_HOST"], **elasticsearch_configuration["ES_ARGS"]
         )
-        if releases is None:
+        default_index = None
+        if default_version is None:
             # Existing deployments keep their current ES_INDEX / ES_ALIAS target.
             elasticsearch_namespace.indices = self._validate_elasticsearch_index(elasticsearch_namespace)
             mappings = elasticsearch_namespace.client.indices.get_mapping(index=elasticsearch_namespace.indices)
             versions = {get_babel_version(mapping) for mapping in mappings.values()}
             if len(versions) != 1:
                 raise ValueError("The default Elasticsearch target must contain exactly one Babel release")
-            version = versions.pop()
-            releases = BabelReleases(version, {version: elasticsearch_namespace.indices[0]})
+            default_version = versions.pop()
+            default_index = elasticsearch_namespace.indices[0]
+        if supported_versions is None:
+            releases = BabelReleases(default_version, {default_version: default_index})
         else:
-            # Optional releases may be temporarily offline. Never replace an
-            # explicitly configured target with the legacy index or alias.
+            if default_version not in supported_versions:
+                raise ValueError("The default Babel release must be included in babel.supported_versions")
+            mappings = elasticsearch_namespace.client.indices.get_mapping(filter_path="*.mappings._meta.src.nodenorm")
+            releases = BabelReleases.from_mappings(
+                default_version, supported_versions, mappings, default_index=default_index
+            )
+            # Only the default must resolve at startup. Unresolved optional
+            # releases fail their selected requests without changing the default.
             elasticsearch_namespace.indices = [releases.resolve().index]
         elasticsearch_namespace.babel = releases
         return elasticsearch_namespace

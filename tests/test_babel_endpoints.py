@@ -232,6 +232,52 @@ class TestBabelEndpoints(AsyncHTTPTestCase):
         assert len(self.client.calls) == 1
         assert self.client.calls[0][1]["index"] == [OLD_INDEX]
 
+    def test_unresolved_supported_release_is_reported_and_rejected_before_lookup(self):
+        def mapping(version):
+            return {"mappings": {"_meta": {"src": {"nodenorm": {"version": version}}}}}
+
+        for matching_indices in (0, 2):
+            with self.subTest(matching_indices=matching_indices):
+                mappings = {
+                    DEFAULT_INDEX: mapping(DEFAULT_VERSION),
+                    **{f"old-build-{number}": mapping(OLD_VERSION) for number in range(matching_indices)},
+                }
+                releases = BabelReleases.from_mappings(
+                    DEFAULT_VERSION, [OLD_VERSION, DEFAULT_VERSION], mappings, default_index=DEFAULT_INDEX
+                )
+                self.namespace.elasticsearch.babel = releases
+                self.client.calls.clear()
+
+                requests = [
+                    (f"/get_setid?curie=INPUT:1&babel_version={OLD_VERSION}", {}),
+                    (
+                        f"/get_setid?babel_version={OLD_VERSION}",
+                        {
+                            "method": "POST",
+                            "headers": {"Content-Type": "application/json"},
+                            "body": json.dumps([{"curies": ["INPUT:1"]}]),
+                        },
+                    ),
+                    (f"/get_semantic_types?babel_version={OLD_VERSION}", {}),
+                ]
+                for url, options in requests:
+                    response = self.fetch(url, **options)
+                    assert response.code == 503
+                    assert OLD_VERSION in response.body.decode()
+                    assert self.client.calls == []
+
+                status = self.fetch("/status")
+                assert status.code == 200
+                body = json.loads(status.body)
+                assert body["available_babel_versions"] == sorted([OLD_VERSION, DEFAULT_VERSION])
+                assert body["default_babel_version"] == DEFAULT_VERSION
+                assert body["babel_version_errors"] == releases.errors
+                assert set(body["babel_version_errors"]) == {OLD_VERSION}
+
+                default = self.assert_selected_release(self.fetch("/get_setid?curie=INPUT:1"), DEFAULT_VERSION)
+                assert default["normalized_curies"] == ["NEW:1"]
+                assert self.client.calls[-1][1]["index"] == [DEFAULT_INDEX]
+
     def test_status_discovers_releases_using_default_mapping(self):
         response = self.fetch(f"/status?babel_version={OLD_VERSION}")
 

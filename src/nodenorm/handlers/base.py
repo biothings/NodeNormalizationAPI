@@ -3,7 +3,7 @@
 from biothings.web.handlers import BaseHandler
 from tornado.web import HTTPError
 
-from nodenorm.babel import BabelRelease
+from nodenorm.babel import BabelRelease, BabelReleaseUnavailable
 
 
 class NodeNormalizationBaseHandler(BaseHandler):
@@ -34,6 +34,8 @@ class NodeNormalizationBaseHandler(BaseHandler):
             release = self.biothings.elasticsearch.babel.resolve(version)
         except ValueError as exc:
             raise HTTPError(400, reason=str(exc)) from exc
+        except BabelReleaseUnavailable as exc:
+            raise HTTPError(503, reason=str(exc)) from exc
         self.set_header("X-Babel-Version", release.version)
         return release
 

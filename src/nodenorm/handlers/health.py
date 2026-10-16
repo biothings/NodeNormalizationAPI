@@ -78,4 +78,6 @@ class NodeNormHealthHandler(NodeNormalizationBaseHandler):
             default_babel_version=releases.default_version,
             available_babel_versions=releases.available_versions,
         )
+        if releases.errors:
+            status_response["babel_version_errors"] = releases.errors
         self.finish(status_response)

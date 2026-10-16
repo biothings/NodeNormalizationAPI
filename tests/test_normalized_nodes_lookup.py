@@ -566,6 +566,36 @@ class TestBabelNormalizationHTTP(AsyncHTTPTestCase):
         assert response.code == 500
         assert [call["index"] for call in self.elasticsearch.calls] == [["nodenorm-new"]]
 
+    def test_unresolved_supported_release_returns_503_before_normalization(self):
+        def mapping(version):
+            return {"mappings": {"_meta": {"src": {"nodenorm": {"version": version}}}}}
+
+        for matches in (0, 2):
+            self._app.biothings.elasticsearch.babel = BabelReleases.from_mappings(
+                "2025sep1",
+                ["2025sep1", "2026jul22"],
+                {
+                    "nodenorm": mapping("2025sep1"),
+                    **{f"new-{number}": mapping("2026jul22") for number in range(matches)},
+                },
+            )
+            requests = [
+                ("/get_normalized_nodes?curie=INPUT%3A1&babel_version=2026jul22", {}),
+                (
+                    "/get_normalized_nodes",
+                    {
+                        "method": "POST",
+                        "headers": {"Content-Type": "application/json"},
+                        "body": json.dumps({"curies": ["INPUT:1"], "babel_version": "2026jul22"}),
+                    },
+                ),
+            ]
+            for url, options in requests:
+                response = self.fetch(url, **options)
+                assert response.code == 503
+                assert b"2026jul22" in response.body
+                assert self.elasticsearch.calls == []
+
     @gen_test
     async def test_overlapping_requests_keep_release_and_conflations_isolated(self):
         self.elasticsearch.pause_default = True
