@@ -30,7 +30,7 @@
       "get": {
         "summary": "Status information on this NodeNorm instance",
         "tags": ["health"],
-        "description": "Returns information about this NodeNorm instance and the elasticsearch instance backing it. Includes the configured default Babel release and supported release names. Existing babel_version and babel_version_url metadata describe the default release.",
+        "description": "Returns information about this NodeNorm instance and its configured Elasticsearch cluster. Includes the default Babel release, supported release names, and discovery errors for releases with missing or ambiguous metadata. Existing babel_version and babel_version_url metadata describe the default release. Discovery runs at startup using the configured Elasticsearch client.",
         "operationId": "status",
         "responses": {
           "200": {
@@ -56,6 +56,16 @@
                         "2025sep1",
                         "2026jul22"
                       ]
+                    },
+                    "babel_version_errors": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      },
+                      "description": "Discovery errors keyed by supported release name. Selecting an affected release returns HTTP 503; the release remains in available_babel_versions.",
+                      "example": {
+                        "2026jul22": "No index declares this Babel release"
+                      }
                     },
                     "babel_version": {
                       "type": "string",
@@ -178,6 +188,9 @@
           },
           "500": {
             "$ref": "#/components/responses/BabelReleaseUnavailable"
+          },
+          "503": {
+            "$ref": "#/components/responses/BabelReleaseUnavailable"
           }
         }
       },
@@ -224,6 +237,9 @@
             "$ref": "#/components/responses/UnsupportedBabelVersion"
           },
           "500": {
+            "$ref": "#/components/responses/BabelReleaseUnavailable"
+          },
+          "503": {
             "$ref": "#/components/responses/BabelReleaseUnavailable"
           }
         }
@@ -311,6 +327,9 @@
           },
           "500": {
             "$ref": "#/components/responses/BabelReleaseUnavailable"
+          },
+          "503": {
+            "$ref": "#/components/responses/BabelReleaseUnavailable"
           }
         }
       },
@@ -388,6 +407,9 @@
           },
           "500": {
             "$ref": "#/components/responses/BabelReleaseUnavailable"
+          },
+          "503": {
+            "$ref": "#/components/responses/BabelReleaseUnavailable"
           }
         },
         "parameters": [
@@ -424,6 +446,9 @@
             "$ref": "#/components/responses/UnsupportedBabelVersion"
           },
           "500": {
+            "$ref": "#/components/responses/BabelReleaseUnavailable"
+          },
+          "503": {
             "$ref": "#/components/responses/BabelReleaseUnavailable"
           }
         },
@@ -770,7 +795,7 @@
           "babel_version": {
             "type": "string",
             "title": "Babel Version",
-            "description": "Supported Babel release name. Omit to use the configured default release; unknown, retired, or malformed values return HTTP 400 with the supported release names.",
+            "description": "Supported Babel release name. Omit to use the configured default release; unknown, retired, or malformed values return HTTP 400 with the supported release names. Supported releases with missing or ambiguous metadata return HTTP 503; /status reports discovery errors.",
             "example": "2025sep1"
           }
         },
@@ -3285,7 +3310,7 @@
         "name": "babel_version",
         "in": "query",
         "required": false,
-        "description": "Supported Babel release name. Omit to use the configured default release; unknown, retired, or malformed values return HTTP 400 with the supported release names.",
+        "description": "Supported Babel release name. Omit to use the configured default release; unknown, retired, or malformed values return HTTP 400 with the supported release names. Supported releases with missing or ambiguous metadata return HTTP 503; /status reports discovery errors.",
         "schema": {
           "type": "string"
         },
@@ -3306,7 +3331,7 @@
         "description": "Invalid request, including an unknown, retired, or malformed babel_version. Selector errors include the supported release names."
       },
       "BabelReleaseUnavailable": {
-        "description": "Processing failed or the selected supported Babel release is unavailable. Requests never fall back to a different release."
+        "description": "Processing failed or the selected supported Babel release is unavailable. HTTP 503 indicates missing or ambiguous release metadata; see babel_version_errors in /status. Requests never fall back to a different release."
       }
     }
   },

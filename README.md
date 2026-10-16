@@ -53,35 +53,46 @@ For example, select `2025sep1` with
 Successful data responses include `X-Babel-Version`, which is also exposed to browser
 clients through CORS. Unknown, retired, or malformed selectors return HTTP 400 with the
 supported release names. A supported release whose backend is unavailable returns an
-error; requests never fall back to another release.
+error; missing or ambiguous release metadata returns HTTP 503. Requests never fall
+back to another release.
 
 `GET /status` reports `default_babel_version` and `available_babel_versions`. The existing
 `babel_version` and `babel_version_url` metadata describe the default release. The
 available list reflects configured support, rather than backend health.
+`babel_version_errors` reports supported releases that could not be resolved from
+Elasticsearch metadata.
 
 ### Configuring supported releases
 
 Add an optional top-level `babel` object to the server JSON configuration supplied with
-`--conf`. For example (replace the Elasticsearch targets with those in your deployment):
+`--conf`:
 
 ```json
 {
   "babel": {
-    "default_version": "2025sep1",
-    "releases": {
-      "2025sep1": "annotator-nodenorm",
-      "2026jul22": "nodenorm-2026jul22"
-    }
+    "supported_versions": ["2025sep1", "2026jul22"]
   }
 }
 ```
 
-Each release must map to one concrete Elasticsearch index or an alias for that release.
-`default_version` must name a configured release. Explicit Babel configuration overrides
-`ES_INDEX` / `ES_ALIAS` for the request default and utilities. With the default `"babel": {}`,
-the server retains the legacy Elasticsearch target and discovers its single Babel
-release from index metadata at startup.
+With `supported_versions` configured, the server uses its existing `ES_HOST` client to
+discover release indices from `mappings._meta.src.nodenorm` metadata on the associated
+cluster. No version-to-index mapping or per-release alias is required. The client's
+Elasticsearch permissions must allow reading mappings across that cluster. Discovery
+uses an explicit `version` field, or a dated release tag in the legacy source URL; it
+does not infer versions from index names. Unrelated indices and invalid metadata are
+ignored.
 
-Configuration is loaded at startup. Restart the service after changing release
-configuration or alias targets, and keep version-specific aliases tied to the same
-Babel release. Removing a release from the configuration retires it for new requests.
+By default, `ES_INDEX` / `ES_ALIAS` still selects the default target. Its metadata must
+identify a release in `supported_versions`; this configured target also disambiguates
+the default if several indices declare that version. Other supported versions must
+each identify one concrete index. An optional `default_version` selects that release
+from discovered indices instead, and must name a supported release with a unique match.
+With the default `"babel": {}`, the server retains its existing target and serves only
+the single Babel release identified by that target's metadata.
+
+Configuration and discovery are loaded at startup. Restart the service after changing
+release configuration, indices, metadata, or alias targets. Removing a release from
+`supported_versions` retires it for new requests. A missing or ambiguous optional
+release remains in `available_babel_versions` with details in `babel_version_errors`;
+requests selecting it return HTTP 503.
