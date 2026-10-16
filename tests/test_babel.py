@@ -76,7 +76,10 @@ def test_legacy_configuration_discovers_version_without_changing_target(index_ex
     client = Mock()
     client.indices.exists.return_value = index_exists
     client.indices.exists_alias.return_value = True
-    client.indices.get_mapping.return_value = {"backing-index": mapping("2025sep1")}
+    client.indices.get_mapping.side_effect = [
+        {"backing-index": mapping("2025sep1")},
+        {"backing-index": mapping("2025sep1"), "another-build": mapping("2026jul22")},
+    ]
 
     with patch("nodenorm.namespace.connections.es") as connections:
         connections.get_client.return_value = client
@@ -84,12 +87,16 @@ def test_legacy_configuration_discovers_version_without_changing_target(index_ex
 
     assert elasticsearch.indices == [target]
     assert elasticsearch.babel.resolve().index == target
-    assert elasticsearch.babel.available_versions == ["2025sep1"]
-    client.indices.get_mapping.assert_called_once_with(index=[target])
+    assert elasticsearch.babel.resolve("2026jul22").index == "another-build"
+    assert elasticsearch.babel.available_versions == ["2025sep1", "2026jul22"]
+    connections.get_client.assert_called_once_with("http://test:9200")
+    connections.get_async_client.assert_called_once_with("http://test:9200")
+    assert client.indices.get_mapping.call_args_list[0].kwargs == {"index": [target]}
+    assert client.indices.get_mapping.call_args_list[1].kwargs == {"filter_path": "*.mappings._meta.src.nodenorm"}
 
 
 def test_explicit_default_discovers_targets_from_the_configured_cluster():
-    namespace = namespace_config({"default_version": "2026jul22", "supported_versions": ["2025sep1", "2026jul22"]})
+    namespace = namespace_config({"default_version": "2026jul22"})
     client = Mock()
     client.indices.get_mapping.return_value = {
         "old-release-build": mapping("2025sep1"),
@@ -109,24 +116,29 @@ def test_explicit_default_discovers_targets_from_the_configured_cluster():
     client.indices.get_mapping.assert_called_once_with(filter_path="*.mappings._meta.src.nodenorm")
 
 
-def test_missing_optional_release_does_not_block_startup():
-    namespace = namespace_config({"default_version": "2025sep1", "supported_versions": ["2025sep1", "2026jul22"]})
+@pytest.mark.parametrize("new_version", ["2026jul22", "2027jan1"])
+def test_new_metadata_release_is_available_without_changing_configuration(new_version):
+    namespace = namespace_config()
     client = Mock()
-    client.indices.get_mapping.return_value = {"default-release-build": mapping("2025sep1")}
+    client.indices.exists.return_value = True
+    client.indices.get_mapping.side_effect = [
+        {"default-release-build": mapping("2025sep1")},
+        {"default-release-build": mapping("2025sep1"), "new-release-build": mapping(new_version)},
+    ]
 
     with patch("nodenorm.namespace.connections.es") as connections:
         connections.get_client.return_value = client
         elasticsearch = namespace.configure_elasticsearch()
 
-    assert elasticsearch.indices == ["default-release-build"]
-    assert set(elasticsearch.babel.errors) == {"2026jul22"}
-    with pytest.raises(BabelReleaseUnavailable):
-        elasticsearch.babel.resolve("2026jul22")
+    assert elasticsearch.indices == ["legacy"]
+    assert elasticsearch.babel.resolve(new_version).index == "new-release-build"
+    assert elasticsearch.babel.available_versions == ["2025sep1", new_version]
+    assert elasticsearch.babel.errors == {}
 
 
 @pytest.mark.parametrize("matches", [0, 2])
 def test_unavailable_explicit_default_blocks_startup(matches):
-    namespace = namespace_config({"default_version": "2026jul22", "supported_versions": ["2025sep1", "2026jul22"]})
+    namespace = namespace_config({"default_version": "2026jul22"})
     client = Mock()
     client.indices.get_mapping.return_value = {
         "old-release-build": mapping("2025sep1"),
@@ -140,7 +152,7 @@ def test_unavailable_explicit_default_blocks_startup(matches):
 
 
 def test_omitted_default_uses_existing_target_metadata_and_discovers_other_releases():
-    namespace = namespace_config({"supported_versions": ["2025sep1", "2026jul22"]})
+    namespace = namespace_config({})
     client = Mock()
     client.indices.exists.return_value = False
     client.indices.exists_alias.return_value = True
@@ -161,16 +173,22 @@ def test_omitted_default_uses_existing_target_metadata_and_discovers_other_relea
     assert client.indices.get_mapping.call_args_list[1].kwargs == {"filter_path": "*.mappings._meta.src.nodenorm"}
 
 
-def test_inferred_default_must_be_supported():
-    namespace = namespace_config({"supported_versions": ["2026jul22"]})
+def test_existing_default_is_included_even_when_absent_from_cluster_mapping_scan():
+    namespace = namespace_config()
     client = Mock()
     client.indices.exists.return_value = True
-    client.indices.get_mapping.return_value = {"old-release-build": mapping("2025sep1")}
+    client.indices.get_mapping.side_effect = [
+        {"old-release-build": mapping("2025sep1")},
+        {"new-release-build": mapping("2026jul22")},
+    ]
 
     with patch("nodenorm.namespace.connections.es") as connections:
         connections.get_client.return_value = client
-        with pytest.raises(ValueError):
-            namespace.configure_elasticsearch()
+        elasticsearch = namespace.configure_elasticsearch()
+
+    assert elasticsearch.babel.resolve().index == "legacy"
+    assert elasticsearch.babel.available_versions == ["2025sep1", "2026jul22"]
+    assert elasticsearch.babel.errors == {}
 
 
 @pytest.mark.parametrize(
@@ -178,23 +196,20 @@ def test_inferred_default_must_be_supported():
     [
         [],
         {"releases": RELEASES, "default_version": "2025sep1"},
-        {"supported_versions": ["2025sep1"], "unknown_option": True},
-        {"default_version": "2025sep1"},
+        {"unknown_option": True},
+        {"supported_versions": ["2025sep1"]},
         {"supported_versions": None},
         {"supported_versions": "2025sep1"},
         {"supported_versions": {}},
         {"supported_versions": []},
-        {"supported_versions": ["2025sep1", "2025sep1"]},
-        {"supported_versions": [42]},
-        {"supported_versions": [None]},
-        {"supported_versions": [[]]},
-        {"supported_versions": ["2025sep1\r\n"]},
-        {"supported_versions": ["2025sep1é"]},
-        {"supported_versions": ["2025 sep1"]},
-        {"supported_versions": [""]},
-        {"supported_versions": ["2025sep1"], "default_version": "retired"},
-        {"supported_versions": ["2025sep1"], "default_version": []},
-        {"supported_versions": ["2025sep1"], "default_version": 42},
+        {"default_version": None},
+        {"default_version": []},
+        {"default_version": 42},
+        {"default_version": False},
+        {"default_version": ""},
+        {"default_version": "2025sep1\r\n"},
+        {"default_version": "2025sep1é"},
+        {"default_version": "2025 sep1"},
     ],
 )
 def test_invalid_configuration_fails_before_connecting_to_elasticsearch(configuration):

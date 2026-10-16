@@ -13,7 +13,7 @@ from biothings.web import connections
 from biothings.web.services.metadata import BiothingsESMetadata
 
 import nodenorm
-from nodenorm.babel import BabelReleases, get_babel_version
+from nodenorm.babel import BabelReleases, get_babel_version, validate_babel_version
 
 
 logger = logging.getLogger(__name__)
@@ -71,18 +71,13 @@ class NodeNormalizationAPINamespace:
         babel_configuration = getattr(self.config, "babel", {})
         if not isinstance(babel_configuration, dict):
             raise ValueError("babel configuration must be an object")
-        supported_versions = None
         default_version = None
         if babel_configuration:
-            if set(babel_configuration) - {"supported_versions", "default_version"}:
-                raise ValueError("babel configuration accepts supported_versions and optional default_version")
-            supported_versions = babel_configuration.get("supported_versions")
-            BabelReleases.validate_versions(supported_versions)
+            if set(babel_configuration) - {"default_version"}:
+                raise ValueError("babel configuration accepts only optional default_version; releases are discovered")
             default_version = babel_configuration.get("default_version")
-            if "default_version" in babel_configuration and (
-                not isinstance(default_version, str) or default_version not in supported_versions
-            ):
-                raise ValueError("babel.default_version must name a release in babel.supported_versions")
+            # Validate the optional override before creating any connections.
+            validate_babel_version(default_version)
 
         elasticsearch_namespace.client = connections.es.get_client(
             elasticsearch_configuration["ES_HOST"], **elasticsearch_configuration["ES_ARGS"]
@@ -100,18 +95,11 @@ class NodeNormalizationAPINamespace:
                 raise ValueError("The default Elasticsearch target must contain exactly one Babel release")
             default_version = versions.pop()
             default_index = elasticsearch_namespace.indices[0]
-        if supported_versions is None:
-            releases = BabelReleases(default_version, {default_version: default_index})
-        else:
-            if default_version not in supported_versions:
-                raise ValueError("The default Babel release must be included in babel.supported_versions")
-            mappings = elasticsearch_namespace.client.indices.get_mapping(filter_path="*.mappings._meta.src.nodenorm")
-            releases = BabelReleases.from_mappings(
-                default_version, supported_versions, mappings, default_index=default_index
-            )
-            # Only the default must resolve at startup. Unresolved optional
-            # releases fail their selected requests without changing the default.
-            elasticsearch_namespace.indices = [releases.resolve().index]
+        mappings = elasticsearch_namespace.client.indices.get_mapping(filter_path="*.mappings._meta.src.nodenorm")
+        releases = BabelReleases.from_mappings(default_version, mappings, default_index=default_index)
+        # Only the default must resolve at startup. Ambiguous optional releases
+        # fail their selected requests without changing the default.
+        elasticsearch_namespace.indices = [releases.resolve().index]
         elasticsearch_namespace.babel = releases
         return elasticsearch_namespace
 

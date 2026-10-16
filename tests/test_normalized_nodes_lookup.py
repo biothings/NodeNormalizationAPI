@@ -566,14 +566,13 @@ class TestBabelNormalizationHTTP(AsyncHTTPTestCase):
         assert response.code == 500
         assert [call["index"] for call in self.elasticsearch.calls] == [["nodenorm-new"]]
 
-    def test_unresolved_supported_release_returns_503_before_normalization(self):
+    def test_unknown_or_ambiguous_release_is_rejected_before_normalization(self):
         def mapping(version):
             return {"mappings": {"_meta": {"src": {"nodenorm": {"version": version}}}}}
 
         for matches in (0, 2):
             self._app.biothings.elasticsearch.babel = BabelReleases.from_mappings(
                 "2025sep1",
-                ["2025sep1", "2026jul22"],
                 {
                     "nodenorm": mapping("2025sep1"),
                     **{f"new-{number}": mapping("2026jul22") for number in range(matches)},
@@ -592,8 +591,12 @@ class TestBabelNormalizationHTTP(AsyncHTTPTestCase):
             ]
             for url, options in requests:
                 response = self.fetch(url, **options)
-                assert response.code == 503
-                assert b"2026jul22" in response.body
+                assert response.code == (503 if matches else 400)
+                if matches:
+                    assert b"2026jul22" in response.body
+                else:
+                    assert b"2025sep1" in response.body
+                    assert b"Supported releases" in response.body
                 assert self.elasticsearch.calls == []
 
     @gen_test

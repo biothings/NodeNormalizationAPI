@@ -232,7 +232,7 @@ class TestBabelEndpoints(AsyncHTTPTestCase):
         assert len(self.client.calls) == 1
         assert self.client.calls[0][1]["index"] == [OLD_INDEX]
 
-    def test_unresolved_supported_release_is_reported_and_rejected_before_lookup(self):
+    def test_unknown_or_ambiguous_release_is_rejected_before_lookup(self):
         def mapping(version):
             return {"mappings": {"_meta": {"src": {"nodenorm": {"version": version}}}}}
 
@@ -243,7 +243,7 @@ class TestBabelEndpoints(AsyncHTTPTestCase):
                     **{f"old-build-{number}": mapping(OLD_VERSION) for number in range(matching_indices)},
                 }
                 releases = BabelReleases.from_mappings(
-                    DEFAULT_VERSION, [OLD_VERSION, DEFAULT_VERSION], mappings, default_index=DEFAULT_INDEX
+                    DEFAULT_VERSION, mappings, default_index=DEFAULT_INDEX
                 )
                 self.namespace.elasticsearch.babel = releases
                 self.client.calls.clear()
@@ -262,23 +262,36 @@ class TestBabelEndpoints(AsyncHTTPTestCase):
                 ]
                 for url, options in requests:
                     response = self.fetch(url, **options)
-                    assert response.code == 503
-                    assert OLD_VERSION in response.body.decode()
+                    assert response.code == (503 if matching_indices else 400)
+                    if matching_indices:
+                        assert OLD_VERSION in response.body.decode()
+                    else:
+                        assert DEFAULT_VERSION in response.body.decode()
+                        assert b"Supported releases" in response.body
                     assert self.client.calls == []
 
                 status = self.fetch("/status")
                 assert status.code == 200
                 body = json.loads(status.body)
-                assert body["available_babel_versions"] == sorted([OLD_VERSION, DEFAULT_VERSION])
+                assert body["available_babel_versions"] == [DEFAULT_VERSION]
                 assert body["default_babel_version"] == DEFAULT_VERSION
-                assert body["babel_version_errors"] == releases.errors
-                assert set(body["babel_version_errors"]) == {OLD_VERSION}
+                assert body.get("babel_version_errors", {}) == releases.errors
+                assert set(releases.errors) == ({OLD_VERSION} if matching_indices else set())
 
                 default = self.assert_selected_release(self.fetch("/get_setid?curie=INPUT:1"), DEFAULT_VERSION)
                 assert default["normalized_curies"] == ["NEW:1"]
                 assert self.client.calls[-1][1]["index"] == [DEFAULT_INDEX]
 
-    def test_status_discovers_releases_using_default_mapping(self):
+    def test_status_and_requests_share_metadata_discovered_releases(self):
+        self.namespace.elasticsearch.babel = BabelReleases.from_mappings(
+            DEFAULT_VERSION,
+            {
+                DEFAULT_INDEX: {"mappings": {"_meta": {"src": {"nodenorm": {"version": DEFAULT_VERSION}}}}},
+                OLD_INDEX: {"mappings": {"_meta": {"src": {"nodenorm": {"version": OLD_VERSION}}}}},
+            },
+            default_index=DEFAULT_INDEX,
+        )
+
         response = self.fetch(f"/status?babel_version={OLD_VERSION}")
 
         assert response.code == 200
@@ -293,6 +306,12 @@ class TestBabelEndpoints(AsyncHTTPTestCase):
         assert body["biolink_model_toolkit_version"] == "test"
         assert body["elasticsearch"]["nodes"]["test-node"]["version"] == "8.17.0"
         assert self.client.calls[0] == ("get_mapping", {"index": [DEFAULT_INDEX]})
+
+        selected = self.assert_selected_release(
+            self.fetch(f"/get_setid?curie=INPUT:1&babel_version={OLD_VERSION}"), OLD_VERSION
+        )
+        assert selected["normalized_curies"] == ["OLD:1"]
+        assert self.client.calls[-1][1]["index"] == [OLD_INDEX]
 
     def test_status_keeps_release_discovery_when_cat_fails(self):
         self.client.cat_error = True

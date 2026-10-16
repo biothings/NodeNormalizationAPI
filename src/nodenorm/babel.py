@@ -7,7 +7,7 @@ BABEL_RELEASES_URL = "https://github.com/NCATSTranslator/Babel/blob/main/release
 logger = logging.getLogger(__name__)
 
 
-def _validate_version_name(version):
+def validate_babel_version(version):
     if (
         not isinstance(version, str)
         or not version
@@ -29,14 +29,14 @@ class BabelRelease:
 
 
 class BabelReleases:
-    """Deployment allowlist of Babel releases and their Elasticsearch targets."""
+    """Babel releases and their Elasticsearch targets discovered from metadata."""
 
     def __init__(self, default_version: str, releases: dict, unavailable: dict = None):
         unavailable = unavailable or {}
         if not isinstance(releases, dict) or not (releases or unavailable):
             raise ValueError("At least one supported Babel release is required")
         for version, index in releases.items():
-            _validate_version_name(version)
+            validate_babel_version(version)
             if (
                 not isinstance(index, str)
                 or not index
@@ -45,7 +45,7 @@ class BabelReleases:
             ):
                 raise ValueError("Each Babel release must target one Elasticsearch index or alias")
         for version in unavailable:
-            _validate_version_name(version)
+            validate_babel_version(version)
         if not isinstance(default_version, str) or default_version not in (releases.keys() | unavailable.keys()):
             raise ValueError("babel.default_version must name a supported release")
 
@@ -53,20 +53,11 @@ class BabelReleases:
         self._releases = {version: BabelRelease(version, index) for version, index in releases.items()}
         self._unavailable = dict(unavailable)
 
-    @staticmethod
-    def validate_versions(versions):
-        if not isinstance(versions, list) or not versions:
-            raise ValueError("babel.supported_versions must be a nonempty list of release names")
-        for version in versions:
-            _validate_version_name(version)
-        if len(set(versions)) != len(versions):
-            raise ValueError("babel.supported_versions must not contain duplicate release names")
-
     @classmethod
-    def from_mappings(cls, default_version, supported_versions, mappings, default_index=None):
-        """Resolve supported releases from source metadata on concrete indices."""
-        cls.validate_versions(supported_versions)
-        candidates = {version: [] for version in supported_versions}
+    def from_mappings(cls, default_version, mappings, default_index=None):
+        """Discover release names and targets from source metadata on concrete indices."""
+        validate_babel_version(default_version)
+        candidates = {default_version: []}
         for index, mapping in mappings.items():
             try:
                 version = get_babel_version(mapping)
@@ -75,8 +66,7 @@ class BabelReleases:
                 # builds. Neither their names nor invalid metadata identify a release.
                 logger.debug("Ignoring index %s without valid Babel source metadata", index)
                 continue
-            if version in candidates:
-                candidates[version].append(index)
+            candidates.setdefault(version, []).append(index)
 
         releases = {}
         unavailable = {}
@@ -95,7 +85,7 @@ class BabelReleases:
 
     @property
     def available_versions(self) -> list[str]:
-        return sorted(self._releases.keys() | self._unavailable.keys())
+        return sorted(self._releases)
 
     @property
     def errors(self) -> dict:
@@ -104,7 +94,7 @@ class BabelReleases:
     def resolve(self, version: str = None) -> BabelRelease:
         if version is None:
             version = self.default_version
-        if not isinstance(version, str) or version not in self.available_versions:
+        if not isinstance(version, str) or version not in (self._releases.keys() | self._unavailable.keys()):
             supported = ", ".join(self.available_versions)
             raise ValueError(f"Unsupported babel_version. Supported releases: {supported}")
         if version in self._unavailable:
@@ -118,7 +108,7 @@ def get_babel_version(index_mapping: dict) -> str:
     source_metadata = index_mapping["mappings"]["_meta"]["src"]["nodenorm"]
     if "version" in source_metadata:
         babel_version = source_metadata["version"]
-        _validate_version_name(babel_version)
+        validate_babel_version(babel_version)
         return babel_version
 
     compendia_url = source_metadata["url"]

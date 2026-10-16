@@ -56,12 +56,11 @@ def test_legacy_source_url_must_identify_a_dated_release(url):
 def test_discovery_uses_metadata_without_inferencing_from_index_names():
     releases = BabelReleases.from_mappings(
         "2025sep1",
-        ["2025sep1", "2026jul22"],
         {
             "arbitrary-index-a": mapping("2025sep1"),
             "arbitrary-index-b": mapping(source={"url": "https://example.org/releases/2026jul22/"}),
             "nodenorm-2025sep1": {"mappings": {}},
-            "other-data": mapping("2024oct1"),
+            "arbitrary-index-c": mapping("2024oct1"),
             "unrelated-index": {"mappings": {"_meta": {"src": {"other": {"version": "2025sep1"}}}}},
             "invalid-metadata": mapping(source={"version": "", "url": "https://example.org/releases/2025sep1/"}),
             "null-metadata": {"mappings": {"_meta": None}},
@@ -71,28 +70,26 @@ def test_discovery_uses_metadata_without_inferencing_from_index_names():
 
     assert releases.resolve().index == "arbitrary-index-a"
     assert releases.resolve("2026jul22").index == "arbitrary-index-b"
-    assert releases.available_versions == ["2025sep1", "2026jul22"]
+    assert releases.resolve("2024oct1").index == "arbitrary-index-c"
+    assert releases.available_versions == ["2024oct1", "2025sep1", "2026jul22"]
     assert releases.errors == {}
 
 
-def test_missing_supported_release_stays_known_but_unavailable():
-    releases = BabelReleases.from_mappings(
-        "2025sep1", ["2025sep1", "2026jul22"], {"default-index": mapping("2025sep1")}
-    )
+def test_release_without_valid_metadata_is_unknown():
+    releases = BabelReleases.from_mappings("2025sep1", {"default-index": mapping("2025sep1")})
 
     assert releases.resolve().index == "default-index"
-    assert releases.available_versions == ["2025sep1", "2026jul22"]
-    assert set(releases.errors) == {"2026jul22"}
-    with pytest.raises(BabelReleaseUnavailable):
+    assert releases.available_versions == ["2025sep1"]
+    assert releases.errors == {}
+    with pytest.raises(ValueError, match="Supported releases: 2025sep1"):
         releases.resolve("2026jul22")
-    with pytest.raises(ValueError, match="Supported releases: 2025sep1, 2026jul22"):
+    with pytest.raises(ValueError, match="Supported releases: 2025sep1"):
         releases.resolve("retired")
 
 
 def test_duplicate_metadata_version_is_unavailable_instead_of_selecting_an_index():
     releases = BabelReleases.from_mappings(
         "2025sep1",
-        ["2025sep1", "2026jul22"],
         {
             "default-index": mapping("2025sep1"),
             "new-build-a": mapping("2026jul22"),
@@ -101,6 +98,7 @@ def test_duplicate_metadata_version_is_unavailable_instead_of_selecting_an_index
     )
 
     assert releases.resolve().index == "default-index"
+    assert releases.available_versions == ["2025sep1"]
     assert set(releases.errors) == {"2026jul22"}
     with pytest.raises(BabelReleaseUnavailable):
         releases.resolve("2026jul22")
@@ -109,7 +107,6 @@ def test_duplicate_metadata_version_is_unavailable_instead_of_selecting_an_index
 def test_existing_default_target_can_select_multiple_indices_of_the_same_release():
     releases = BabelReleases.from_mappings(
         "2025sep1",
-        ["2025sep1", "2026jul22"],
         {
             "old-build-a": mapping("2025sep1"),
             "old-build-b": mapping("2025sep1"),
@@ -120,4 +117,15 @@ def test_existing_default_target_can_select_multiple_indices_of_the_same_release
 
     assert releases.resolve().index == "existing-alias"
     assert releases.resolve("2026jul22").index == "new-build"
+    assert releases.errors == {}
+
+
+def test_existing_default_target_is_available_without_a_concrete_mapping_match():
+    releases = BabelReleases.from_mappings(
+        "2025sep1", {"new-build": mapping("2026jul22")}, default_index="existing-alias"
+    )
+
+    assert releases.resolve().index == "existing-alias"
+    assert releases.resolve("2026jul22").index == "new-build"
+    assert releases.available_versions == ["2025sep1", "2026jul22"]
     assert releases.errors == {}
