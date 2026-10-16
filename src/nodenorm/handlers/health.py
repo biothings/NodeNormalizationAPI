@@ -73,4 +73,9 @@ class NodeNormHealthHandler(NodeNormalizationBaseHandler):
                 **nodes,
             }
 
+        releases = self.biothings.elasticsearch.babel
+        status_response.update(
+            default_babel_version=releases.default_version,
+            available_babel_versions=releases.available_versions,
+        )
         self.finish(status_response)

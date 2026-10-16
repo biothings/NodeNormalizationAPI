@@ -46,7 +46,10 @@ class SetIdentifierHandler(NodeNormalizationBaseHandler):
                 status_code=400,
             )
 
-        set_identifiers = await generate_setid(self.biothings, curie_group, conflations)
+        release = self.select_babel_release(self.get_query_argument("babel_version", None))
+        set_identifiers = await generate_setid(
+            self.biothings, curie_group, conflations, search_indices=[release.index]
+        )
 
         if not set_identifiers:
             raise HTTPError(detail="Error occurred during processing.", status_code=500)
@@ -61,13 +64,17 @@ class SetIdentifierHandler(NodeNormalizationBaseHandler):
                 status_code=400,
             )
 
+        release = self.select_babel_release(self.get_query_argument("babel_version", None))
+
         # We have to make a minor change to the API to ensure we're avoiding a security concern
         # enforced by tornado, so we return a dictionary here instead of a list
         set_identifiers = {}
         for index, group in enumerate(post_body):
             curies = group.get("curies", [])
             conflations = group.get("conflations", [])
-            set_identifiers[index] = await generate_setid(self.biothings, curies, conflations)
+            set_identifiers[index] = await generate_setid(
+                self.biothings, curies, conflations, search_indices=[release.index]
+            )
 
         if not set_identifiers:
             raise HTTPError(detail="Error occurred during processing.", status_code=500)
@@ -76,7 +83,10 @@ class SetIdentifierHandler(NodeNormalizationBaseHandler):
 
 
 async def generate_setid(
-    biothings_metadata: NodeNormalizationAPINamespace, curies: list[str], conflations: list[str]
+    biothings_metadata: NodeNormalizationAPINamespace,
+    curies: list[str],
+    conflations: list[str],
+    search_indices: Optional[list[str]] = None,
 ) -> dict:
     """
     Generate a SetID for a set of curies.
@@ -84,6 +94,7 @@ async def generate_setid(
     :param biothings_metadata: BiothingsNamepspace object containing configuration information
     :param curies: A list of curies to generate a set ID for.
     :param conflations: A list of conflations to apply. Must be one or both of 'GeneProtein' and 'DrugChemical'.
+    :param search_indices: Request-selected Elasticsearch targets; omitted for the deployment default.
     :return: A SetIDResponse with the Set ID.
     """
 
@@ -102,7 +113,12 @@ async def generate_setid(
 
     # We use get_normalized_nodes() to normalize all the CURIEs for us.
     normalization_results = await get_normalized_nodes(
-        biothings_metadata, curies, gene_protein_conflation, drug_chemical_conflation, include_descriptions=False
+        biothings_metadata,
+        curies,
+        gene_protein_conflation,
+        drug_chemical_conflation,
+        include_descriptions=False,
+        search_indices=search_indices,
     )
 
     # We prepare a set of sorted, deduplicated curies.
