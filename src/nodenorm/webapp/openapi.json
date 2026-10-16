@@ -30,7 +30,7 @@
       "get": {
         "summary": "Status information on this NodeNorm instance",
         "tags": ["health"],
-        "description": "Returns information about this NodeNorm instance and its configured Elasticsearch cluster. Includes the default Babel release, supported release names, and discovery errors for releases with missing or ambiguous metadata. Existing babel_version and babel_version_url metadata describe the default release. Discovery runs at startup using the configured Elasticsearch client.",
+        "description": "Returns information about this NodeNorm instance and its configured Elasticsearch cluster. Includes the default Babel release, available releases discovered from Elasticsearch metadata, and discovery errors for ambiguous releases. Existing babel_version and babel_version_url metadata describe the default release. Discovery runs at startup using the configured Elasticsearch client and requires no configured version list.",
         "operationId": "status",
         "responses": {
           "200": {
@@ -51,7 +51,7 @@
                       "items": {
                         "type": "string"
                       },
-                      "description": "Supported release names from the deployment configuration; this list does not indicate backend health.",
+                      "description": "Babel releases resolved from Elasticsearch metadata. Ambiguous releases are excluded; this list does not indicate backend health.",
                       "example": [
                         "2025sep1",
                         "2026jul22"
@@ -62,9 +62,9 @@
                       "additionalProperties": {
                         "type": "string"
                       },
-                      "description": "Discovery errors keyed by supported release name. Selecting an affected release returns HTTP 503; the release remains in available_babel_versions.",
+                      "description": "Discovery errors keyed by ambiguous release name. Selecting an affected release returns HTTP 503; the release is excluded from available_babel_versions.",
                       "example": {
-                        "2026jul22": "No index declares this Babel release"
+                        "2026jul22": "Multiple indices declare this Babel release"
                       }
                     },
                     "babel_version": {
@@ -795,7 +795,7 @@
           "babel_version": {
             "type": "string",
             "title": "Babel Version",
-            "description": "Supported Babel release name. Omit to use the configured default release; unknown, retired, or malformed values return HTTP 400 with the supported release names. Supported releases with missing or ambiguous metadata return HTTP 503; /status reports discovery errors.",
+            "description": "Babel release name discovered from Elasticsearch metadata. Omit to use the default release; unknown, removed, or malformed values return HTTP 400 with the available release names. Ambiguous releases return HTTP 503; /status reports discovery errors.",
             "example": "2025sep1"
           }
         },
@@ -3310,7 +3310,7 @@
         "name": "babel_version",
         "in": "query",
         "required": false,
-        "description": "Supported Babel release name. Omit to use the configured default release; unknown, retired, or malformed values return HTTP 400 with the supported release names. Supported releases with missing or ambiguous metadata return HTTP 503; /status reports discovery errors.",
+        "description": "Babel release name discovered from Elasticsearch metadata. Omit to use the default release; unknown, removed, or malformed values return HTTP 400 with the available release names. Ambiguous releases return HTTP 503; /status reports discovery errors.",
         "schema": {
           "type": "string"
         },
@@ -3328,10 +3328,10 @@
     },
     "responses": {
       "UnsupportedBabelVersion": {
-        "description": "Invalid request, including an unknown, retired, or malformed babel_version. Selector errors include the supported release names."
+        "description": "Invalid request, including an unknown, removed, or malformed babel_version. Selector errors include the available release names discovered from Elasticsearch metadata."
       },
       "BabelReleaseUnavailable": {
-        "description": "Processing failed or the selected supported Babel release is unavailable. HTTP 503 indicates missing or ambiguous release metadata; see babel_version_errors in /status. Requests never fall back to a different release."
+        "description": "Processing failed or the selected Babel release is unavailable. HTTP 503 indicates ambiguous release metadata; see babel_version_errors in /status. Requests never fall back to a different release."
       }
     }
   },
