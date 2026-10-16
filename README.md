@@ -72,9 +72,11 @@ versions from index names. Unrelated indices and invalid metadata are ignored.
 
 By default, `ES_INDEX` / `ES_ALIAS` still selects the default target. Its metadata must
 identify a release; this configured target also disambiguates the default if several
-indices declare that version. Other available versions must each identify one concrete
-index. An optional top-level `babel` object in the server JSON configuration supplied
-with `--conf` can override the default:
+indices declare that version. The default is pinned to the concrete backing indices
+resolved at startup, so moving an alias takes effect after restart. A default alias
+may span multiple indices if all declare the same release. Other available versions
+must each identify one concrete index. An optional top-level `babel` object in the
+server JSON configuration supplied with `--conf` can override the default:
 
 ```json
 {
@@ -85,7 +87,10 @@ with `--conf` can override the default:
 ```
 
 The override must name a discovered release with a unique match. Configuration and
-discovery are loaded at startup. Restart the service after adding or removing NodeNorm
-indices, or changing metadata, default configuration, or alias targets, to refresh the
-available releases. Verify the reported versions and sample results before rollout;
-discovery relies on metadata accurately describing each index's contents.
+discovery are loaded at startup. Adding a release index makes it available after
+restart; the default changes only when the configured target, alias, or default
+override changes and the service restarts. Restart also refreshes removed releases
+and changed metadata. Keep indices serving existing processes until the restart
+rollout completes; removing an index earlier makes requests using it fail.
+Verify the reported versions and sample results before rollout; discovery relies on
+metadata accurately describing each index's contents.

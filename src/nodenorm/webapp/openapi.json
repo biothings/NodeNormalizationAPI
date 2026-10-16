@@ -30,7 +30,7 @@
       "get": {
         "summary": "Status information on this NodeNorm instance",
         "tags": ["health"],
-        "description": "Returns information about this NodeNorm instance and its configured Elasticsearch cluster. Includes the default Babel release, available releases discovered from Elasticsearch metadata, and discovery errors for ambiguous releases. Existing babel_version and babel_version_url metadata describe the default release. Discovery runs at startup using the configured Elasticsearch client and requires no configured version list.",
+        "description": "Returns information about this NodeNorm instance and its configured Elasticsearch cluster. Includes the default Babel release, available releases discovered from Elasticsearch metadata, and discovery errors for ambiguous releases. Existing babel_version and babel_version_url metadata describe the default release. Discovery runs at startup using the configured Elasticsearch client and requires no configured version list. Release targets are pinned to concrete indices until restart; moving the default alias takes effect after restart. Adding a release does not automatically change the default.",
         "operationId": "status",
         "responses": {
           "200": {
