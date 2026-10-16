@@ -13,6 +13,7 @@ from biothings.web import connections
 from biothings.web.services.metadata import BiothingsESMetadata
 
 import nodenorm
+from nodenorm.babel import BabelReleases, get_babel_version
 
 
 logger = logging.getLogger(__name__)
@@ -67,6 +68,12 @@ class NodeNormalizationAPINamespace:
         """
         elasticsearch_namespace = types.SimpleNamespace()
         elasticsearch_configuration = self.config.elasticsearch
+        babel_configuration = getattr(self.config, "babel", {})
+        if not isinstance(babel_configuration, dict):
+            raise ValueError("babel configuration must be an object")
+        releases = None
+        if babel_configuration:
+            releases = BabelReleases(babel_configuration.get("default_version"), babel_configuration.get("releases"))
 
         elasticsearch_namespace.client = connections.es.get_client(
             elasticsearch_configuration["ES_HOST"], **elasticsearch_configuration["ES_ARGS"]
@@ -74,7 +81,20 @@ class NodeNormalizationAPINamespace:
         elasticsearch_namespace.async_client = connections.es.get_async_client(
             elasticsearch_configuration["ES_HOST"], **elasticsearch_configuration["ES_ARGS"]
         )
-        elasticsearch_namespace.indices = self._validate_elasticsearch_index(elasticsearch_namespace)
+        if releases is None:
+            # Existing deployments keep their current ES_INDEX / ES_ALIAS target.
+            elasticsearch_namespace.indices = self._validate_elasticsearch_index(elasticsearch_namespace)
+            mappings = elasticsearch_namespace.client.indices.get_mapping(index=elasticsearch_namespace.indices)
+            versions = {get_babel_version(mapping) for mapping in mappings.values()}
+            if len(versions) != 1:
+                raise ValueError("The default Elasticsearch target must contain exactly one Babel release")
+            version = versions.pop()
+            releases = BabelReleases(version, {version: elasticsearch_namespace.indices[0]})
+        else:
+            # Optional releases may be temporarily offline. Never replace an
+            # explicitly configured target with the legacy index or alias.
+            elasticsearch_namespace.indices = [releases.resolve().index]
+        elasticsearch_namespace.babel = releases
         return elasticsearch_namespace
 
     def _validate_elasticsearch_index(self, elasticsearch_namespace: types.SimpleNamespace) -> dict:
