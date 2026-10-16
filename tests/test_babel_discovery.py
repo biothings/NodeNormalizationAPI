@@ -112,20 +112,21 @@ def test_existing_default_target_can_select_multiple_indices_of_the_same_release
             "old-build-b": mapping("2025sep1"),
             "new-build": mapping("2026jul22"),
         },
-        default_index="existing-alias",
+        default_index=("old-build-a", "old-build-b"),
     )
 
-    assert releases.resolve().index == "existing-alias"
+    assert releases.resolve().index == ("old-build-a", "old-build-b")
+    assert releases.resolve().search_indices == ["old-build-a", "old-build-b"]
     assert releases.resolve("2026jul22").index == "new-build"
     assert releases.errors == {}
 
 
 def test_existing_default_target_is_available_without_a_concrete_mapping_match():
     releases = BabelReleases.from_mappings(
-        "2025sep1", {"new-build": mapping("2026jul22")}, default_index="existing-alias"
+        "2025sep1", {"new-build": mapping("2026jul22")}, default_index="old-build"
     )
 
-    assert releases.resolve().index == "existing-alias"
+    assert releases.resolve().index == "old-build"
     assert releases.resolve("2026jul22").index == "new-build"
     assert releases.available_versions == ["2025sep1", "2026jul22"]
     assert releases.errors == {}

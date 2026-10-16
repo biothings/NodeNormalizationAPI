@@ -6,12 +6,14 @@ import sys
 from copy import deepcopy
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
+from unittest.mock import Mock, patch
 
 import pytest
 from tornado.testing import AsyncHTTPTestCase, gen_test
 from tornado.web import Application
 
 from nodenorm.babel import BabelReleases
+from nodenorm.namespace import NodeNormalizationAPINamespace
 
 
 class FakeBiolinkToolkit:
@@ -535,6 +537,40 @@ class TestBabelNormalizationHTTP(AsyncHTTPTestCase):
 
         self.assert_release_response(response, "2026jul22", "NEW", conflated=True)
         assert [call["index"] for call in self.elasticsearch.calls] == [["nodenorm-new"], ["nodenorm-new"]]
+
+    def test_moving_default_alias_cannot_change_pinned_release_results(self):
+        def mapping(version):
+            return {"mappings": {"_meta": {"src": {"nodenorm": {"version": version}}}}}
+
+        namespace = NodeNormalizationAPINamespace.__new__(NodeNormalizationAPINamespace)
+        namespace.config = SimpleNamespace(
+            elasticsearch={
+                "ES_HOST": "http://test:9200",
+                "ES_ARGS": {},
+                "ES_INDEX": "",
+                "ES_ALIAS": "moving-default",
+            }
+        )
+        client = Mock()
+        client.indices.exists_alias.return_value = True
+        client.indices.get_mapping.side_effect = [
+            {"nodenorm": mapping("2025sep1")},
+            {"nodenorm": mapping("2025sep1"), "nodenorm-new": mapping("2026jul22")},
+        ]
+        with patch("nodenorm.namespace.connections.es") as connections:
+            connections.get_client.return_value = client
+            connections.get_async_client.return_value = self.elasticsearch
+            self._app.biothings.elasticsearch = namespace.configure_elasticsearch()
+
+        # Simulate CoCoES moving the alias after discovery. Both unversioned
+        # requests and explicit old-release requests must still read old data.
+        self.elasticsearch.sources["moving-default"] = self.elasticsearch.sources["nodenorm-new"]
+        for selector in ("", "&babel_version=2025sep1"):
+            response = self.fetch(f"/get_normalized_nodes?curie=INPUT%3A1&conflate=false{selector}")
+            self.assert_release_response(response, "2025sep1", "OLD")
+
+        assert [call["index"] for call in self.elasticsearch.calls] == [["nodenorm"], ["nodenorm"]]
+        assert self._app.biothings.elasticsearch.indices == ["nodenorm"]
 
     def test_unknown_query_release_is_rejected_before_elasticsearch(self):
         response = self.fetch("/get_normalized_nodes?curie=INPUT%3A1&babel_version=retired-release")

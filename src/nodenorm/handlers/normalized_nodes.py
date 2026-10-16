@@ -62,7 +62,7 @@ class NormalizedNodesHandler(NodeNormalizationBaseHandler):
             drug_chemical_conflate,
             include_descriptions=description,
             include_individual_types=individual_types,
-            search_indices=[release.index],
+            search_indices=release.search_indices,
         )
 
         # If curie contains at least one entry, then the only way normalized_nodes could be blank
@@ -158,7 +158,7 @@ class NormalizedNodesHandler(NodeNormalizationBaseHandler):
             drug_chemical_conflate,
             include_descriptions=description,
             include_individual_types=individual_types,
-            search_indices=[release.index],
+            search_indices=release.search_indices,
         )
 
         # If curie contains at least one entry, then the only way normalized_nodes could be blank

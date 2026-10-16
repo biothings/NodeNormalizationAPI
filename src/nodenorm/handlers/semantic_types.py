@@ -20,7 +20,7 @@ class SemanticTypeHandler(NodeNormalizationBaseHandler):
         release = self.select_babel_release(self.get_query_argument("babel_version", None))
         try:
             type_aggregation_result = await self.biothings.elasticsearch.async_client.search(
-                aggregations=type_aggregation, index=[release.index], size=0, source_includes=source_fields
+                aggregations=type_aggregation, index=release.search_indices, size=0, source_includes=source_fields
             )
         except Exception as gen_exc:
             network_error = HTTPError(

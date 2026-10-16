@@ -48,7 +48,7 @@ class SetIdentifierHandler(NodeNormalizationBaseHandler):
 
         release = self.select_babel_release(self.get_query_argument("babel_version", None))
         set_identifiers = await generate_setid(
-            self.biothings, curie_group, conflations, search_indices=[release.index]
+            self.biothings, curie_group, conflations, search_indices=release.search_indices
         )
 
         if not set_identifiers:
@@ -73,7 +73,7 @@ class SetIdentifierHandler(NodeNormalizationBaseHandler):
             curies = group.get("curies", [])
             conflations = group.get("conflations", [])
             set_identifiers[index] = await generate_setid(
-                self.biothings, curies, conflations, search_indices=[release.index]
+                self.biothings, curies, conflations, search_indices=release.search_indices
             )
 
         if not set_identifiers:

@@ -1,6 +1,7 @@
 import logging
 import re
 from dataclasses import dataclass
+from typing import Union
 from urllib.parse import urlparse
 
 BABEL_RELEASES_URL = "https://github.com/NCATSTranslator/Babel/blob/main/releases"
@@ -25,7 +26,11 @@ class BabelReleaseUnavailable(RuntimeError):
 @dataclass(frozen=True)
 class BabelRelease:
     version: str
-    index: str
+    index: Union[str, tuple[str, ...]]
+
+    @property
+    def search_indices(self) -> list[str]:
+        return [self.index] if isinstance(self.index, str) else list(self.index)
 
 
 class BabelReleases:
@@ -37,13 +42,17 @@ class BabelReleases:
             raise ValueError("At least one supported Babel release is required")
         for version, index in releases.items():
             validate_babel_version(version)
-            if (
-                not isinstance(index, str)
-                or not index
-                or index == "_all"
-                or any(char.isspace() or char in "*,?" for char in index)
-            ):
-                raise ValueError("Each Babel release must target one Elasticsearch index or alias")
+            targets = (index,) if isinstance(index, str) else index
+            if not isinstance(targets, tuple) or not targets:
+                raise ValueError("Each Babel release must target one or more Elasticsearch indices")
+            for target in targets:
+                if (
+                    not isinstance(target, str)
+                    or not target
+                    or target == "_all"
+                    or any(char.isspace() or char in "*,?" for char in target)
+                ):
+                    raise ValueError("Each Babel release must target literal Elasticsearch indices")
         for version in unavailable:
             validate_babel_version(version)
         if not isinstance(default_version, str) or default_version not in (releases.keys() | unavailable.keys()):
@@ -72,8 +81,8 @@ class BabelReleases:
         unavailable = {}
         for version, indices in candidates.items():
             if version == default_version and default_index is not None:
-                # The existing deployment target already chooses the default,
-                # including when the cluster also holds another copy of that release.
+                # The configured default already selects concrete backing indices,
+                # including when the cluster holds another copy of that release.
                 releases[version] = default_index
             elif len(indices) == 1:
                 releases[version] = indices[0]

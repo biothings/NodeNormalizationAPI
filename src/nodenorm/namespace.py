@@ -87,19 +87,21 @@ class NodeNormalizationAPINamespace:
         )
         default_index = None
         if default_version is None:
-            # Existing deployments keep their current ES_INDEX / ES_ALIAS target.
+            # Resolve the configured default once. Query its concrete backing
+            # indices so moving an alias cannot change a selected release.
             elasticsearch_namespace.indices = self._validate_elasticsearch_index(elasticsearch_namespace)
             mappings = elasticsearch_namespace.client.indices.get_mapping(index=elasticsearch_namespace.indices)
             versions = {get_babel_version(mapping) for mapping in mappings.values()}
             if len(versions) != 1:
                 raise ValueError("The default Elasticsearch target must contain exactly one Babel release")
             default_version = versions.pop()
-            default_index = elasticsearch_namespace.indices[0]
+            backing_indices = tuple(mappings)
+            default_index = backing_indices[0] if len(backing_indices) == 1 else backing_indices
         mappings = elasticsearch_namespace.client.indices.get_mapping(filter_path="*.mappings._meta.src.nodenorm")
         releases = BabelReleases.from_mappings(default_version, mappings, default_index=default_index)
         # Only the default must resolve at startup. Ambiguous optional releases
         # fail their selected requests without changing the default.
-        elasticsearch_namespace.indices = [releases.resolve().index]
+        elasticsearch_namespace.indices = releases.resolve().search_indices
         elasticsearch_namespace.babel = releases
         return elasticsearch_namespace
 
