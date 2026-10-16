@@ -1,6 +1,9 @@
 """Shared handler behavior for NodeNormalization API endpoints."""
 
 from biothings.web.handlers import BaseHandler
+from tornado.web import HTTPError
+
+from nodenorm.babel import BabelRelease
 
 
 class NodeNormalizationBaseHandler(BaseHandler):
@@ -23,6 +26,16 @@ class NodeNormalizationBaseHandler(BaseHandler):
         self.set_header("Access-Control-Allow-Methods", self.cors_methods)
         self.set_header("Access-Control-Allow-Headers", requested_headers or "*")
         self.set_header("Access-Control-Max-Age", self.cors_max_age)
+        self.set_header("Access-Control-Expose-Headers", "X-Babel-Version")
+
+    def select_babel_release(self, version: str = None) -> BabelRelease:
+        """Resolve once per request without changing the shared Elasticsearch target."""
+        try:
+            release = self.biothings.elasticsearch.babel.resolve(version)
+        except ValueError as exc:
+            raise HTTPError(400, reason=str(exc)) from exc
+        self.set_header("X-Babel-Version", release.version)
+        return release
 
     def options(self, *args, **kwargs):
         self.finish()

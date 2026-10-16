@@ -17,6 +17,7 @@ def assert_cors_headers(headers, allowed_headers="*"):
     assert headers["Access-Control-Allow-Methods"] == "GET, POST, HEAD, OPTIONS"
     assert headers["Access-Control-Allow-Headers"] == allowed_headers
     assert headers["Access-Control-Max-Age"] == "600"
+    assert headers["Access-Control-Expose-Headers"] == "X-Babel-Version"
 
 
 class TestCorsHeaders(AsyncHTTPTestCase):

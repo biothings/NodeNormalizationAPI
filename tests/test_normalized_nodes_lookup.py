@@ -1,3 +1,4 @@
+import asyncio
 import importlib.util
 import json
 import logging
@@ -7,8 +8,10 @@ from pathlib import Path
 from types import ModuleType, SimpleNamespace
 
 import pytest
-from tornado.testing import AsyncHTTPTestCase
+from tornado.testing import AsyncHTTPTestCase, gen_test
 from tornado.web import Application
+
+from nodenorm.babel import BabelReleases
 
 
 class FakeBiolinkToolkit:
@@ -65,6 +68,7 @@ def fake_namespace(response_batches, indices=None):
         elasticsearch=SimpleNamespace(
             async_client=FakeAsyncElasticsearch(response_batches),
             indices=indices or ["nodenorm"],
+            babel=BabelReleases("2025sep1", {"2025sep1": "nodenorm", "2026jul22": "nodenorm-new"}),
         )
     )
 
@@ -430,3 +434,157 @@ class TestInvalidSourceTypeHTTP(AsyncHTTPTestCase):
 
         assert response.code == 200
         assert json.loads(response.body) == {"CORRUPT:1": None, "CORRUPT:2": None}
+
+
+class ReleaseElasticsearch:
+    """Return distinct release data and optionally pause an in-flight lookup."""
+
+    def __init__(self):
+        self.calls = []
+        self.unavailable_indices = set()
+        self.pause_default = False
+        self.default_started = asyncio.Event()
+        self.resume_default = asyncio.Event()
+        self.sources = {}
+        for index, prefix in [("nodenorm", "OLD"), ("nodenorm-new", "NEW")]:
+            self.sources[index] = {
+                "INPUT:1": {
+                    "identifiers": [{"i": f"{prefix}:BASE", "l": f"{prefix} base", "c": {"gp": ["PARTNER:1"]}}],
+                    "preferred_name": f"{prefix} base",
+                    "type": "biolink:Gene",
+                    "ic": 1.0,
+                    "taxa": [],
+                },
+                "PARTNER:1": {
+                    "identifiers": [{"i": f"{prefix}:PARTNER", "l": f"{prefix} partner"}],
+                    "preferred_name": f"{prefix} partner",
+                    "type": "biolink:Protein",
+                },
+            }
+
+    async def msearch(self, **kwargs):
+        self.calls.append(kwargs)
+        (index,) = kwargs["index"]
+        curies = [
+            search["query"]["bool"]["filter"][0]["terms"]["identifiers.i"][0]
+            for search in kwargs["searches"][1::2]
+        ]
+        if self.pause_default and index == "nodenorm" and curies == ["INPUT:1"]:
+            self.default_started.set()
+            await self.resume_default.wait()
+        if index in self.unavailable_indices:
+            raise RuntimeError("Selected release is unavailable")
+        responses = []
+        for curie in curies:
+            source = self.sources[index].get(curie)
+            responses.append(hit_response(curie, deepcopy(source)) if source is not None else no_hit_response())
+        return SimpleNamespace(body={"responses": responses})
+
+
+class TestBabelNormalizationHTTP(AsyncHTTPTestCase):
+    def get_app(self):
+        app = Application([(r"/get_normalized_nodes", normalized_nodes.NormalizedNodesHandler)])
+        app.biothings = fake_namespace([])
+        self.elasticsearch = ReleaseElasticsearch()
+        app.biothings.elasticsearch.async_client = self.elasticsearch
+        return app
+
+    def assert_release_response(self, response, version, prefix, conflated=False):
+        assert response.code == 200
+        assert response.headers["X-Babel-Version"] == version
+        kind = "PARTNER" if conflated else "BASE"
+        label = f"{prefix} {kind.lower()}"
+        assert json.loads(response.body) == {
+            "INPUT:1": {
+                "id": {"identifier": f"{prefix}:{kind}", "label": label},
+                "equivalent_identifiers": [{"identifier": f"{prefix}:{kind}", "label": label}],
+                "type": ["biolink:Protein" if conflated else "biolink:Gene"],
+                "information_content": 1.0,
+                "taxa": [],
+            }
+        }
+
+    def test_get_defaults_to_legacy_release_and_selects_another_release(self):
+        for selector, version, prefix in [
+            ("", "2025sep1", "OLD"),
+            ("&babel_version=2026jul22", "2026jul22", "NEW"),
+        ]:
+            response = self.fetch(f"/get_normalized_nodes?curie=INPUT%3A1&conflate=false{selector}")
+            self.assert_release_response(response, version, prefix)
+
+        assert [call["index"] for call in self.elasticsearch.calls] == [["nodenorm"], ["nodenorm-new"]]
+        assert self._app.biothings.elasticsearch.indices == ["nodenorm"]
+
+    def test_post_uses_body_selector_and_preserves_query_independence(self):
+        for selector, version, prefix in [
+            ({}, "2025sep1", "OLD"),
+            ({"babel_version": "2026jul22"}, "2026jul22", "NEW"),
+        ]:
+            response = self.fetch(
+                "/get_normalized_nodes?babel_version=not-a-release",
+                method="POST",
+                headers={"Content-Type": "application/json"},
+                body=json.dumps({"curies": ["INPUT:1"], "conflate": False, **selector}),
+            )
+            self.assert_release_response(response, version, prefix)
+
+        assert [call["index"] for call in self.elasticsearch.calls] == [["nodenorm"], ["nodenorm-new"]]
+
+    def test_selected_release_also_routes_conflation_lookup(self):
+        response = self.fetch("/get_normalized_nodes?curie=INPUT%3A1&babel_version=2026jul22")
+
+        self.assert_release_response(response, "2026jul22", "NEW", conflated=True)
+        assert [call["index"] for call in self.elasticsearch.calls] == [["nodenorm-new"], ["nodenorm-new"]]
+
+    def test_unknown_query_release_is_rejected_before_elasticsearch(self):
+        response = self.fetch("/get_normalized_nodes?curie=INPUT%3A1&babel_version=retired-release")
+
+        assert response.code == 400
+        assert b"2025sep1" in response.body
+        assert b"2026jul22" in response.body
+        assert self.elasticsearch.calls == []
+
+    def test_invalid_body_release_is_rejected_with_supported_versions(self):
+        for selector in ["retired-release", None, [], 123, True]:
+            response = self.fetch(
+                "/get_normalized_nodes",
+                method="POST",
+                headers={"Content-Type": "application/json"},
+                body=json.dumps({"curies": ["INPUT:1"], "babel_version": selector}),
+            )
+
+            assert response.code == 400, selector
+            assert b"2025sep1" in response.body
+            assert b"2026jul22" in response.body
+        assert self.elasticsearch.calls == []
+
+    def test_unavailable_supported_release_does_not_fall_back(self):
+        self.elasticsearch.unavailable_indices.add("nodenorm-new")
+
+        response = self.fetch("/get_normalized_nodes?curie=INPUT%3A1&babel_version=2026jul22&conflate=false")
+
+        assert response.code == 500
+        assert [call["index"] for call in self.elasticsearch.calls] == [["nodenorm-new"]]
+
+    @gen_test
+    async def test_overlapping_requests_keep_release_and_conflations_isolated(self):
+        self.elasticsearch.pause_default = True
+        old_request = self.http_client.fetch(self.get_url("/get_normalized_nodes?curie=INPUT%3A1"))
+        await asyncio.wait_for(self.elasticsearch.default_started.wait(), timeout=1)
+        try:
+            new_response = await self.http_client.fetch(
+                self.get_url("/get_normalized_nodes?curie=INPUT%3A1&babel_version=2026jul22")
+            )
+        finally:
+            self.elasticsearch.resume_default.set()
+        old_response = await old_request
+
+        self.assert_release_response(old_response, "2025sep1", "OLD", conflated=True)
+        self.assert_release_response(new_response, "2026jul22", "NEW", conflated=True)
+        assert [call["index"] for call in self.elasticsearch.calls] == [
+            ["nodenorm"],
+            ["nodenorm-new"],
+            ["nodenorm-new"],
+            ["nodenorm"],
+        ]
+        assert self._app.biothings.elasticsearch.indices == ["nodenorm"]
