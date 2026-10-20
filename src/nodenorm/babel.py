@@ -115,7 +115,7 @@ def get_babel_version(index_mapping: dict) -> str:
     """Return the explicit Babel source version, with legacy URL fallback."""
 
     source_metadata = index_mapping["mappings"]["_meta"]["src"]["nodenorm"]
-    if "version" in source_metadata:
+    if "version" in source_metadata and source_metadata["version"] is not None:
         babel_version = source_metadata["version"]
         validate_babel_version(babel_version)
         return babel_version

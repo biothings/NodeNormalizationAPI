@@ -15,7 +15,7 @@ def test_explicit_metadata_version_is_authoritative():
     assert get_babel_version(metadata) == "2026jul22"
 
 
-@pytest.mark.parametrize("version", [None, "", 42, False, [], {}, "2025 sep1", "2025sep1\r\n", "2025sep1é"])
+@pytest.mark.parametrize("version", ["", 42, False, [], {}, "2025 sep1", "2025sep1\r\n", "2025sep1é"])
 def test_invalid_explicit_version_does_not_fall_back_to_valid_url(version):
     metadata = mapping(source={"version": version, "url": "https://example.org/releases/2025sep1/"})
 
@@ -23,6 +23,7 @@ def test_invalid_explicit_version_does_not_fall_back_to_valid_url(version):
         get_babel_version(metadata)
 
 
+@pytest.mark.parametrize("version_metadata", [{}, {"version": None}], ids=["missing-version", "null-version"])
 @pytest.mark.parametrize(
     "url",
     [
@@ -31,10 +32,11 @@ def test_invalid_explicit_version_does_not_fall_back_to_valid_url(version):
         "https://example.org/releases/2025sep1/?download=true#source",
     ],
 )
-def test_legacy_source_url_identifies_dated_release(url):
-    assert get_babel_version(mapping(source={"url": url})) == "2025sep1"
+def test_legacy_source_url_identifies_dated_release(url, version_metadata):
+    assert get_babel_version(mapping(source={"url": url, **version_metadata})) == "2025sep1"
 
 
+@pytest.mark.parametrize("version_metadata", [{}, {"version": None}], ids=["missing-version", "null-version"])
 @pytest.mark.parametrize(
     "url",
     [
@@ -48,9 +50,9 @@ def test_legacy_source_url_identifies_dated_release(url):
         42,
     ],
 )
-def test_legacy_source_url_must_identify_a_dated_release(url):
+def test_legacy_source_url_must_identify_a_dated_release(url, version_metadata):
     with pytest.raises((ValueError, TypeError, AttributeError)):
-        get_babel_version(mapping(source={"url": url}))
+        get_babel_version(mapping(source={"url": url, **version_metadata}))
 
 
 def test_discovery_uses_metadata_without_inferencing_from_index_names():
@@ -58,7 +60,7 @@ def test_discovery_uses_metadata_without_inferencing_from_index_names():
         "2025sep1",
         {
             "arbitrary-index-a": mapping("2025sep1"),
-            "arbitrary-index-b": mapping(source={"url": "https://example.org/releases/2026jul22/"}),
+            "arbitrary-index-b": mapping(source={"version": None, "url": "https://example.org/releases/2026jul22/"}),
             "nodenorm-2025sep1": {"mappings": {}},
             "arbitrary-index-c": mapping("2024oct1"),
             "unrelated-index": {"mappings": {"_meta": {"src": {"other": {"version": "2025sep1"}}}}},

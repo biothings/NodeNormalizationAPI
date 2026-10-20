@@ -30,7 +30,7 @@
       "get": {
         "summary": "Status information on this NodeNorm instance",
         "tags": ["health"],
-        "description": "Returns information about this NodeNorm instance and its configured Elasticsearch cluster. Includes the default Babel release, available releases discovered from Elasticsearch metadata, and discovery errors for ambiguous releases. Existing babel_version and babel_version_url metadata describe the default release. Discovery runs at startup using the configured Elasticsearch client and requires no configured version list. Release targets are pinned to concrete indices until restart; moving the default alias takes effect after restart. Adding a release does not automatically change the default.",
+        "description": "Returns service status and version information for this NodeNorm instance. The babel object contains the default release name, available release names mapped to their release URLs, and optional discovery errors for ambiguous releases. Discovery runs at startup using the configured Elasticsearch client and requires no configured version list. Release targets are pinned to concrete indices until restart; moving the default alias takes effect after restart. Adding a release does not automatically change the default.",
         "operationId": "status",
         "responses": {
           "200": {
@@ -40,37 +40,64 @@
                 "schema": {
                   "type": "object",
                   "title": "Response Status Get",
+                  "required": [
+                    "status",
+                    "version",
+                    "biolink_model_toolkit_version",
+                    "babel"
+                  ],
                   "properties": {
-                    "default_babel_version": {
+                    "status": {
                       "type": "string",
-                      "description": "Babel release used when babel_version is omitted.",
-                      "example": "2025sep1"
+                      "const": "running",
+                      "description": "Service status.",
+                      "example": "running"
                     },
-                    "available_babel_versions": {
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      },
-                      "description": "Babel releases resolved from Elasticsearch metadata. Ambiguous releases are excluded; this list does not indicate backend health.",
-                      "example": [
-                        "2025sep1",
-                        "2026jul22"
-                      ]
+                    "version": {
+                      "type": "string",
+                      "description": "Node Normalization API version.",
+                      "example": "1.0.0"
                     },
-                    "babel_version_errors": {
+                    "biolink_model_toolkit_version": {
+                      "type": "string",
+                      "description": "Biolink Model version used by the toolkit.",
+                      "example": "v4.4.3"
+                    },
+                    "babel": {
                       "type": "object",
-                      "additionalProperties": {
-                        "type": "string"
-                      },
-                      "description": "Discovery errors keyed by ambiguous release name. Selecting an affected release returns HTTP 503; the release is excluded from available_babel_versions.",
-                      "example": {
-                        "2026jul22": "Multiple indices declare this Babel release"
+                      "required": [
+                        "default",
+                        "available"
+                      ],
+                      "properties": {
+                        "default": {
+                          "type": "string",
+                          "description": "Babel release used when babel_version is omitted. Its release URL is available under the matching key in babel.available.",
+                          "example": "2026jul22"
+                        },
+                        "available": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string",
+                            "format": "uri"
+                          },
+                          "description": "Babel release names mapped to their release URLs. Releases are resolved from Elasticsearch metadata. Ambiguous releases are excluded; this map does not indicate backend health.",
+                          "example": {
+                            "2025sep1": "https://github.com/NCATSTranslator/Babel/blob/main/releases/2025sep1/README.md",
+                            "2026jul22": "https://github.com/NCATSTranslator/Babel/blob/main/releases/2026jul22/README.md"
+                          }
+                        },
+                        "errors": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          },
+                          "description": "Present when discovery finds ambiguous releases. Errors are keyed by release name. Selecting an affected release returns HTTP 503; the release is excluded from babel.available.",
+                          "example": {
+                            "2026aug1": "Multiple indices declare this Babel release"
+                          }
+                        }
                       }
-                    },
-                    "babel_version": {
-                      "type": "string",
-                      "description": "Babel metadata for the configured default release.",
-                      "example": "2025sep1"
                     }
                   }
                 }
@@ -3331,7 +3358,7 @@
         "description": "Invalid request, including an unknown, removed, or malformed babel_version. Selector errors include the available release names discovered from Elasticsearch metadata."
       },
       "BabelReleaseUnavailable": {
-        "description": "Processing failed or the selected Babel release is unavailable. HTTP 503 indicates ambiguous release metadata; see babel_version_errors in /status. Requests never fall back to a different release."
+        "description": "Processing failed or the selected Babel release is unavailable. HTTP 503 indicates ambiguous release metadata; see babel.errors in /status. Requests never fall back to a different release."
       }
     }
   },

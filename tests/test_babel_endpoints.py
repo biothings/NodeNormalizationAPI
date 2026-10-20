@@ -273,9 +273,14 @@ class TestBabelEndpoints(AsyncHTTPTestCase):
                 status = self.fetch("/status")
                 assert status.code == 200
                 body = json.loads(status.body)
-                assert body["available_babel_versions"] == [DEFAULT_VERSION]
-                assert body["default_babel_version"] == DEFAULT_VERSION
-                assert body.get("babel_version_errors", {}) == releases.errors
+                assert body["babel"]["available"] == {
+                    DEFAULT_VERSION: (
+                        f"https://github.com/NCATSTranslator/Babel/blob/main/releases/{DEFAULT_VERSION}/README.md"
+                    )
+                }
+                assert body["babel"]["default"] == DEFAULT_VERSION
+                assert body["babel"].get("errors", {}) == releases.errors
+                assert ("errors" in body["babel"]) == bool(matching_indices)
                 assert set(releases.errors) == ({OLD_VERSION} if matching_indices else set())
 
                 default = self.assert_selected_release(self.fetch("/get_setid?curie=INPUT:1"), DEFAULT_VERSION)
@@ -297,15 +302,19 @@ class TestBabelEndpoints(AsyncHTTPTestCase):
         assert response.code == 200
         body = json.loads(response.body)
         assert body["status"] == "running"
-        assert body["default_babel_version"] == DEFAULT_VERSION
-        assert body["available_babel_versions"] == sorted([OLD_VERSION, DEFAULT_VERSION])
-        assert body["babel_version"] == DEFAULT_VERSION
-        assert body["babel_version_url"].endswith(f"/{DEFAULT_VERSION}/README.md")
-        assert body["backend"] == "elasticsearch"
+        assert body["babel"] == {
+            "default": DEFAULT_VERSION,
+            "available": {
+                OLD_VERSION: f"https://github.com/NCATSTranslator/Babel/blob/main/releases/{OLD_VERSION}/README.md",
+                DEFAULT_VERSION: f"https://github.com/NCATSTranslator/Babel/blob/main/releases/{DEFAULT_VERSION}/README.md",
+            },
+        }
+        assert set(body) == {"status", "version", "biolink_model_toolkit_version", "babel"}
+        assert "backend" not in body
         assert body["version"] == handlers.health.get_openapi_version()
         assert body["biolink_model_toolkit_version"] == "test"
-        assert body["elasticsearch"]["nodes"]["test-node"]["version"] == "8.17.0"
-        assert self.client.calls[0] == ("get_mapping", {"index": [DEFAULT_INDEX]})
+        assert "elasticsearch" not in body
+        assert self.client.calls == [("get_mapping", {"index": [DEFAULT_INDEX]})]
 
         selected = self.assert_selected_release(
             self.fetch(f"/get_setid?curie=INPUT:1&babel_version={OLD_VERSION}"), OLD_VERSION
@@ -313,21 +322,22 @@ class TestBabelEndpoints(AsyncHTTPTestCase):
         assert selected["normalized_curies"] == ["OLD:1"]
         assert self.client.calls[-1][1]["index"] == [OLD_INDEX]
 
-    def test_status_keeps_release_discovery_when_cat_fails(self):
+    def test_status_does_not_depend_on_cluster_node_access(self):
         self.client.cat_error = True
 
         response = self.fetch("/status")
 
         assert response.code == 200
         body = json.loads(response.body)
-        assert body["status"] == "error"
-        assert body["default_babel_version"] == DEFAULT_VERSION
-        assert body["available_babel_versions"] == sorted([OLD_VERSION, DEFAULT_VERSION])
-        assert body["babel_version"] == DEFAULT_VERSION
-        assert body["babel_version_url"].endswith(f"/{DEFAULT_VERSION}/README.md")
-        assert body["backend"] == "elasticsearch"
+        assert body["status"] == "running"
+        assert body["babel"]["default"] == DEFAULT_VERSION
+        assert set(body["babel"]["available"]) == {OLD_VERSION, DEFAULT_VERSION}
+        assert "errors" not in body["babel"]
+        assert "backend" not in body
+        assert "elasticsearch" not in body
         assert body["version"] == handlers.health.get_openapi_version()
-        assert self.client.calls[0] == ("get_mapping", {"index": [DEFAULT_INDEX]})
+        assert body["biolink_model_toolkit_version"] == "test"
+        assert self.client.calls == [("get_mapping", {"index": [DEFAULT_INDEX]})]
 
     def test_cors_exposes_selected_release_header(self):
         response = self.fetch(

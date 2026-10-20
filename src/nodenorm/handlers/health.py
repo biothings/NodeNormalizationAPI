@@ -19,10 +19,7 @@ def get_openapi_version() -> str:
 
 
 class NodeNormHealthHandler(NodeNormalizationBaseHandler):
-    """
-    Important Endpoints
-    * /_cat/nodes
-    """
+    """Report service status and release metadata."""
 
     name = "health"
 
@@ -32,52 +29,21 @@ class NodeNormHealthHandler(NodeNormalizationBaseHandler):
 
         mapping_response = await async_client.indices.get_mapping(index=search_indices)
         index_mapping = next(iter(mapping_response.values()))
-        babel_version = get_babel_version(index_mapping)
-        babel_version_url = get_babel_release_url(babel_version)
-        version = get_openapi_version()
-        try:
-            attributes = [
-                "name",
-                "cpu",
-                "disk.avail",
-                "disk.total",
-                "disk.used",
-                "disk.used_percent",
-                "heap.current",
-                "heap.max",
-                "load_1m",
-                "load_5m",
-                "load_15m",
-                "uptime,version",
-            ]
-            h_string = ",".join(attributes)
-            cat_nodes_response = await async_client.cat.nodes(format="json", h=h_string)
-            nodes_status = {node["name"]: node for node in cat_nodes_response}
-            nodes = {"elasticsearch": {"nodes": nodes_status}}
-        except Exception:
-            status_response = {
-                "status": "error",
-                "version": version,
-                "babel_version": babel_version,
-                "babel_version_url": babel_version_url,
-                "backend": "elasticsearch",
-            }
-        else:
-            status_response = {
-                "status": "running",
-                "version": version,
-                "babel_version": babel_version,
-                "babel_version_url": babel_version_url,
-                "backend": "elasticsearch",
-                "biolink_model_toolkit_version": BIOLINK_MODEL_VERSION,
-                **nodes,
-            }
+        # Validate live default metadata while reporting the releases resolved at startup.
+        get_babel_version(index_mapping)
 
         releases = self.biothings.elasticsearch.babel
-        status_response.update(
-            default_babel_version=releases.default_version,
-            available_babel_versions=releases.available_versions,
-        )
+        babel_status = {
+            "default": releases.default_version,
+            "available": {version: get_babel_release_url(version) for version in releases.available_versions},
+        }
         if releases.errors:
-            status_response["babel_version_errors"] = releases.errors
+            babel_status["errors"] = releases.errors
+
+        status_response = {
+            "status": "running",
+            "version": get_openapi_version(),
+            "biolink_model_toolkit_version": BIOLINK_MODEL_VERSION,
+            "babel": babel_status,
+        }
         self.finish(status_response)

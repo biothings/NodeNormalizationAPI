@@ -224,9 +224,8 @@ class NodeNormalizationAPINamespace:
         Loads the default configuration file found in ~/src/nodenorm/config/config.default.json
         to create a base structure. It then checks if an optional configuration file was provided
         via the command line options. We override the default configuration file with this option
-        based file. After that, we setup our static path structure for loading the webapp containing
-        our swaggerui frontend. We check any other command line options and then return our
-        configuration data structure
+        based file. We check any other command line options and then return our configuration
+        data structure. Static frontend routes are defined explicitly by build_handlers.
         """
         configuration = {}
 
@@ -244,12 +243,6 @@ class NodeNormalizationAPINamespace:
             if optional_configuration.exists():
                 with open(optional_configuration, "r", encoding="utf-8") as handle:
                     configuration.update(json.load(handle))
-
-        # Force the static path to the webapp directory
-        package_directory = importlib.resources.files(nodenorm)
-        webapp_directory = package_directory.joinpath("webapp")
-        configuration["webserver"]["SETTINGS"]["static_path"] = str(webapp_directory)
-        configuration["webserver"]["SETTINGS"]["static_url_prefix"] = "/"
 
         configuration_namespace = types.SimpleNamespace(**configuration)
 

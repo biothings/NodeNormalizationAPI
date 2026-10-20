@@ -29,6 +29,23 @@ The documentation is maintained at the [biothings_explorer](https://github.com/b
 as each knowledgebase API will be integrated into the [BioThings Explorer application](https://explorer.biothings.io) become
 a Translator's standard KP (Knowledge Provider) API.
 
+## Running Node Normalization locally
+
+With the project installed in `.venv`, start the server from the repository root:
+
+```bash
+.venv/bin/python -m nodenorm --host=127.0.0.1 --port=8000
+```
+
+The default configuration connects to Elasticsearch at `http://localhost:9200` using
+the `annotator-nodenorm` index or alias. Add `--conf=/path/to/config.local.json` for
+local overrides such as connection headers.
+
+Local defaults enable `webserver.SETTINGS.debug` and `webserver.SETTINGS.autoreload`.
+Changes to imported Python files automatically restart the server. JSON configuration
+and OpenAPI version changes require a manual restart. The Docker configuration disables
+debug mode and autoreload.
+
 ## Selecting a Babel release in Node Normalization
 
 Clients can select an available Babel release for each request. Omitting `babel_version`
@@ -55,11 +72,28 @@ clients through CORS. Unknown, removed, or malformed selectors return HTTP 400 w
 available release names. Selecting a release with ambiguous metadata returns HTTP 503;
 an unavailable backend also returns an error. Requests never fall back to another release.
 
-`GET /status` reports `default_babel_version` and `available_babel_versions`. The existing
-`babel_version` and `babel_version_url` metadata describe the default release. The
-available list comes from Elasticsearch metadata, rather than a configured version list;
-it does not indicate backend health. `babel_version_errors` reports ambiguous releases,
-which are excluded from the available list.
+`GET /status` groups release information under `babel`. Its `default` field names the
+default release, and `available` maps each available release to its release URL:
+
+```json
+{
+  "status": "running",
+  "version": "1.0.0",
+  "biolink_model_toolkit_version": "v4.4.3",
+  "babel": {
+    "default": "2026jul22",
+    "available": {
+      "2025sep1": "https://github.com/NCATSTranslator/Babel/blob/main/releases/2025sep1/README.md",
+      "2026jul22": "https://github.com/NCATSTranslator/Babel/blob/main/releases/2026jul22/README.md"
+    }
+  }
+}
+```
+
+Available releases come from Elasticsearch metadata, rather than a configured version
+list; they do not indicate backend health. When discovery finds ambiguous releases,
+`babel.errors` maps their names to error messages. Those releases are excluded from
+`babel.available`.
 
 ### Discovering available releases
 
