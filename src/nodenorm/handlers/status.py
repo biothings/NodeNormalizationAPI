@@ -42,6 +42,7 @@ class NodeNormHealthHandler(NodeNormalizationBaseHandler):
 
         status_response = {
             "status": "running",
+            "deployment_environment": self.biothings.config.deployment_environment,
             "version": get_openapi_version(),
             "biolink_model_toolkit_version": BIOLINK_MODEL_VERSION,
             "babel": babel_status,

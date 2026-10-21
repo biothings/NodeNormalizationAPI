@@ -34,8 +34,10 @@ a Translator's standard KP (Knowledge Provider) API.
 With the project installed in `.venv`, start the server from the repository root:
 
 ```bash
-.venv/bin/python -m nodenorm --host=127.0.0.1 --port=8000
+NODENORM_DEPLOYMENT_ENV=local .venv/bin/python -m nodenorm --host=127.0.0.1 --port=8000
 ```
+
+This explicitly reports `"deployment_environment": "local"` in `GET /status`.
 
 The default configuration connects to Elasticsearch at `http://localhost:9200` using
 the `annotator-nodenorm` index or alias. Add `--conf=/path/to/config.local.json` for
@@ -45,6 +47,22 @@ Local defaults enable `webserver.SETTINGS.debug` and `webserver.SETTINGS.autorel
 Changes to imported Python files automatically restart the server. JSON configuration
 and OpenAPI version changes require a manual restart. The Docker configuration disables
 debug mode and autoreload.
+
+## Reporting the deployment environment
+
+`GET /status` reports `deployment_environment` from explicit deployment configuration.
+Set `NODENORM_DEPLOYMENT_ENV` to the environment name: `CI`, `Prod`, `Test`, or `local`.
+Use `NODENORM_DEPLOYMENT_ENV=local` when running locally to override the `unknown`
+fallback. You can also set `"deployment_environment": "local"` at the top level of
+the JSON file passed through `--conf`. A nonempty environment variable takes precedence.
+The value is loaded at startup and defaults to `unknown` when unset; request headers,
+hostnames, and test-runner settings do not determine it.
+
+Kubernetes deployments pass the pod's `gov.nih.ncats.appenv` label into
+`NODENORM_DEPLOYMENT_ENV` through the Downward API. Set that label in the environment's
+Helm values under `ncats.labels`. DevOps supplies `CI`, `Prod`, or `Test`, and the API
+preserves that capitalization. The chart defaults to `unknown`. Restart the service
+after changing the environment configuration.
 
 ## Selecting a Babel release in Node Normalization
 
@@ -78,6 +96,7 @@ the default release, and `available_versions` maps each available release to its
 ```json
 {
   "status": "running",
+  "deployment_environment": "CI",
   "version": "1.0.0",
   "biolink_model_toolkit_version": "v4.4.3",
   "babel": {

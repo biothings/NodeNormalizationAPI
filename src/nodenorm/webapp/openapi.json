@@ -42,6 +42,7 @@
                   "title": "Response Status Get",
                   "required": [
                     "status",
+                    "deployment_environment",
                     "version",
                     "biolink_model_toolkit_version",
                     "babel"
@@ -52,6 +53,11 @@
                       "const": "running",
                       "description": "Service status.",
                       "example": "running"
+                    },
+                    "deployment_environment": {
+                      "type": "string",
+                      "description": "Explicit deployment environment loaded at startup from NODENORM_DEPLOYMENT_ENV or the deployment_environment JSON configuration field. Set NODENORM_DEPLOYMENT_ENV=local for local runs. Kubernetes supplies the environment variable from the gov.nih.ncats.appenv pod label, whose deployed values are CI, Prod, and Test. Capitalization is preserved. Defaults to unknown when unset; it is not inferred from request headers or hostnames.",
+                      "example": "CI"
                     },
                     "version": {
                       "type": "string",

@@ -115,6 +115,7 @@ class TestBabelEndpoints(AsyncHTTPTestCase):
     def get_app(self):
         self.client = FakeAsyncElasticsearch()
         self.namespace = SimpleNamespace(
+            config=SimpleNamespace(deployment_environment="unknown"),
             elasticsearch=SimpleNamespace(
                 async_client=self.client,
                 indices=[DEFAULT_INDEX],
@@ -309,7 +310,8 @@ class TestBabelEndpoints(AsyncHTTPTestCase):
                 DEFAULT_VERSION: f"https://github.com/NCATSTranslator/Babel/blob/main/releases/{DEFAULT_VERSION}/README.md",
             },
         }
-        assert set(body) == {"status", "version", "biolink_model_toolkit_version", "babel"}
+        assert set(body) == {"status", "deployment_environment", "version", "biolink_model_toolkit_version", "babel"}
+        assert body["deployment_environment"] == "unknown"
         assert "backend" not in body
         assert body["version"] == handlers.status.get_openapi_version()
         assert body["biolink_model_toolkit_version"] == "test"
@@ -338,6 +340,20 @@ class TestBabelEndpoints(AsyncHTTPTestCase):
         assert body["version"] == handlers.status.get_openapi_version()
         assert body["biolink_model_toolkit_version"] == "test"
         assert self.client.calls == [("get_mapping", {"index": [DEFAULT_INDEX]})]
+
+    def test_status_reports_configured_environment_independently_of_request_host(self):
+        for environment in ("CI", "Prod", "Test", "unknown"):
+            self.namespace.config.deployment_environment = environment
+            for headers in (
+                {},
+                {"Host": "nodenorm.prod.example"},
+                {"Host": "nodenorm.test.example", "X-Forwarded-Host": "nodenorm.ci.example"},
+            ):
+                with self.subTest(environment=environment, headers=headers):
+                    response = self.fetch("/status", headers=headers)
+
+                    assert response.code == 200
+                    assert json.loads(response.body)["deployment_environment"] == environment
 
     def test_cors_exposes_selected_release_header(self):
         response = self.fetch(

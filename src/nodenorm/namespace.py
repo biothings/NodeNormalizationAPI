@@ -2,6 +2,7 @@ import importlib.resources
 import importlib.util
 import json
 import logging
+import os
 import pathlib
 import re
 import sys
@@ -243,6 +244,11 @@ class NodeNormalizationAPINamespace:
             if optional_configuration.exists():
                 with open(optional_configuration, "r", encoding="utf-8") as handle:
                     configuration.update(json.load(handle))
+
+        deployment_environment = os.getenv("NODENORM_DEPLOYMENT_ENV") or configuration["deployment_environment"]
+        if not isinstance(deployment_environment, str):
+            raise ValueError("deployment_environment must be a string")
+        configuration["deployment_environment"] = deployment_environment.strip() or "unknown"
 
         configuration_namespace = types.SimpleNamespace(**configuration)
 

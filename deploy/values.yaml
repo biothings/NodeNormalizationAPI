@@ -51,7 +51,8 @@ ingress:
 
 ncats:
   labels:
-    gov.nih.ncats.appenv: appenv
+    # DevOps supplies CI, Prod, or Test in deployment values; preserve capitalization.
+    gov.nih.ncats.appenv: unknown
     gov.nih.ncats.appname: bte-node-normalization
     gov.nih.ncats.appentry: NODE_NORM_HOSTNAME_VALUE
     gov.nih.ncats.appentrytype: https

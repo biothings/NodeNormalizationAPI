@@ -51,6 +51,59 @@ def test_default_configuration_starts_autoreload():
     assert "/status?" in app.biothings.handlers
 
 
+@pytest.mark.parametrize("environment", [None, ""])
+def test_deployment_environment_defaults_to_unknown(monkeypatch, environment):
+    monkeypatch.delenv("NODENORM_DEPLOYMENT_ENV", raising=False)
+    if environment is not None:
+        monkeypatch.setenv("NODENORM_DEPLOYMENT_ENV", environment)
+    monkeypatch.setenv("CI", "true")
+    with patch.object(NodeNormalizationAPINamespace, "configure_elasticsearch", return_value=SimpleNamespace()):
+        namespace = NodeNormalizationAPINamespace(SimpleNamespace())
+
+    assert namespace.config.deployment_environment == "unknown"
+
+
+@pytest.mark.parametrize(
+    "configured, environment, expected",
+    [
+        ("CI", None, "CI"),
+        ("Prod", None, "Prod"),
+        (" Test ", None, "Test"),
+        ("local", "CI", "CI"),
+        ("CI", "Test", "Test"),
+        ("CI", " Prod ", "Prod"),
+        ("CI", "", "CI"),
+        ("CI", "   ", "unknown"),
+        ("", None, "unknown"),
+        ("   ", None, "unknown"),
+    ],
+)
+def test_deployment_environment_configuration(tmp_path, monkeypatch, configured, environment, expected):
+    monkeypatch.delenv("NODENORM_DEPLOYMENT_ENV", raising=False)
+    if environment is not None:
+        monkeypatch.setenv("NODENORM_DEPLOYMENT_ENV", environment)
+    configuration_path = tmp_path / "config.json"
+    configuration_path.write_text(json.dumps({"deployment_environment": configured}), encoding="utf-8")
+
+    with patch.object(NodeNormalizationAPINamespace, "configure_elasticsearch", return_value=SimpleNamespace()):
+        namespace = NodeNormalizationAPINamespace(SimpleNamespace(conf=configuration_path))
+
+    assert namespace.config.deployment_environment == expected
+
+
+@pytest.mark.parametrize("configured", [None, 1, False, [], {}])
+def test_deployment_environment_rejects_nonstring_configuration(tmp_path, monkeypatch, configured):
+    monkeypatch.delenv("NODENORM_DEPLOYMENT_ENV", raising=False)
+    configuration_path = tmp_path / "config.json"
+    configuration_path.write_text(json.dumps({"deployment_environment": configured}), encoding="utf-8")
+
+    with patch.object(NodeNormalizationAPINamespace, "configure_elasticsearch") as configure_elasticsearch:
+        with pytest.raises(ValueError, match="deployment_environment"):
+            NodeNormalizationAPINamespace(SimpleNamespace(conf=configuration_path))
+
+    configure_elasticsearch.assert_not_called()
+
+
 @pytest.mark.parametrize("debug, autoreload", [(True, False), (False, True), (False, False)])
 def test_custom_configuration_controls_autoreload(tmp_path, debug, autoreload):
     configuration_path = tmp_path / "config.json"
