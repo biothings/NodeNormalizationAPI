@@ -91,7 +91,9 @@ available release names. Selecting a release with ambiguous metadata returns HTT
 an unavailable backend also returns an error. Requests never fall back to another release.
 
 `GET /status` groups release information under `babel`. Its `default_version` field names
-the default release, and `available_versions` maps each available release to its release URL:
+the default release, `available_versions` maps each available release to its release URL,
+and `indices` maps the same release names to arrays of selected concrete Elasticsearch
+index names:
 
 ```json
 {
@@ -104,15 +106,23 @@ the default release, and `available_versions` maps each available release to its
     "available_versions": {
       "2025sep1": "https://github.com/NCATSTranslator/Babel/blob/main/releases/2025sep1/README.md",
       "2026jul22": "https://github.com/NCATSTranslator/Babel/blob/main/releases/2026jul22/README.md"
+    },
+    "indices": {
+      "2025sep1": ["nodenorm_2025sep1"],
+      "2026jul22": ["nodenorm_2026jul22"]
     }
   }
 }
 ```
 
+Index names in this example are illustrative. Each `indices` array reports the targets
+selected at startup and pinned until restart. A default alias can select multiple concrete
+indices, so its array may contain more than one name.
+
 Available releases come from Elasticsearch metadata, rather than a configured version
-list; they do not indicate backend health. When discovery finds ambiguous releases,
+list; these maps do not indicate backend health. When discovery finds ambiguous releases,
 `babel.errors` maps their names to error messages. Those releases are excluded from
-`babel.available_versions`.
+both `babel.available_versions` and `babel.indices`.
 
 ### Discovering available releases
 

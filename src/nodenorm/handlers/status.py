@@ -36,6 +36,7 @@ class NodeNormHealthHandler(NodeNormalizationBaseHandler):
         babel_status = {
             "default_version": releases.default_version,
             "available_versions": {version: get_babel_release_url(version) for version in releases.available_versions},
+            "indices": {version: releases.resolve(version).search_indices for version in releases.available_versions},
         }
         if releases.errors:
             babel_status["errors"] = releases.errors

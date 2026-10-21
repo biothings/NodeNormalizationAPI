@@ -5,6 +5,7 @@ import json
 import sys
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
+from unittest.mock import AsyncMock
 
 from tornado.testing import AsyncHTTPTestCase
 from tornado.web import Application
@@ -280,6 +281,7 @@ class TestBabelEndpoints(AsyncHTTPTestCase):
                     )
                 }
                 assert body["babel"]["default_version"] == DEFAULT_VERSION
+                assert body["babel"]["indices"] == {DEFAULT_VERSION: [DEFAULT_INDEX]}
                 assert body["babel"].get("errors", {}) == releases.errors
                 assert ("errors" in body["babel"]) == bool(matching_indices)
                 assert set(releases.errors) == ({OLD_VERSION} if matching_indices else set())
@@ -309,6 +311,7 @@ class TestBabelEndpoints(AsyncHTTPTestCase):
                 OLD_VERSION: f"https://github.com/NCATSTranslator/Babel/blob/main/releases/{OLD_VERSION}/README.md",
                 DEFAULT_VERSION: f"https://github.com/NCATSTranslator/Babel/blob/main/releases/{DEFAULT_VERSION}/README.md",
             },
+            "indices": {OLD_VERSION: [OLD_INDEX], DEFAULT_VERSION: [DEFAULT_INDEX]},
         }
         assert set(body) == {"status", "deployment_environment", "version", "biolink_model_toolkit_version", "babel"}
         assert body["deployment_environment"] == "unknown"
@@ -323,6 +326,36 @@ class TestBabelEndpoints(AsyncHTTPTestCase):
         )
         assert selected["normalized_curies"] == ["OLD:1"]
         assert self.client.calls[-1][1]["index"] == [OLD_INDEX]
+
+    def test_status_reports_only_the_pinned_indices_for_a_multi_index_default(self):
+        def mapping(version):
+            return {"mappings": {"_meta": {"src": {"nodenorm": {"version": version}}}}}
+
+        default_indices = ["default-build-a", "default-build-b"]
+        default_mappings = {index: mapping(DEFAULT_VERSION) for index in default_indices}
+        self.namespace.elasticsearch.babel = BabelReleases.from_mappings(
+            DEFAULT_VERSION,
+            {
+                **default_mappings,
+                "unselected-default-build": mapping(DEFAULT_VERSION),
+                OLD_INDEX: mapping(OLD_VERSION),
+            },
+            default_index=tuple(default_indices),
+        )
+        self.namespace.elasticsearch.indices = default_indices
+        get_mapping = AsyncMock(return_value=default_mappings)
+        self.client.indices.get_mapping = get_mapping
+
+        response = self.fetch("/status")
+
+        assert response.code == 200
+        body = json.loads(response.body)
+        assert body["babel"]["indices"] == {
+            OLD_VERSION: [OLD_INDEX],
+            DEFAULT_VERSION: default_indices,
+        }
+        assert set(body["babel"]["indices"]) == set(body["babel"]["available_versions"])
+        get_mapping.assert_awaited_once_with(index=default_indices)
 
     def test_status_does_not_depend_on_cluster_node_access(self):
         self.client.cat_error = True

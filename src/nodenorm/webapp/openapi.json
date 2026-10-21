@@ -30,7 +30,7 @@
       "get": {
         "summary": "Status information on this NodeNorm instance",
         "tags": ["health"],
-        "description": "Returns service status and version information for this NodeNorm instance. The babel object contains the default release name, available release names mapped to their release URLs, and optional discovery errors for ambiguous releases. Discovery runs at startup using the configured Elasticsearch client and requires no configured version list. Release targets are pinned to concrete indices until restart; moving the default alias takes effect after restart. Adding a release does not automatically change the default.",
+        "description": "Returns service status and version information for this NodeNorm instance. The babel object contains the default release name, available release names mapped to their release URLs, selected concrete Elasticsearch indices for each available release, and optional discovery errors for ambiguous releases. Discovery runs at startup using the configured Elasticsearch client and requires no configured version list. Release targets are pinned to concrete indices until restart; moving the default alias takes effect after restart. Adding a release does not automatically change the default.",
         "operationId": "status",
         "responses": {
           "200": {
@@ -73,7 +73,8 @@
                       "type": "object",
                       "required": [
                         "default_version",
-                        "available_versions"
+                        "available_versions",
+                        "indices"
                       ],
                       "properties": {
                         "default_version": {
@@ -93,12 +94,27 @@
                             "2026jul22": "https://github.com/NCATSTranslator/Babel/blob/main/releases/2026jul22/README.md"
                           }
                         },
+                        "indices": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "array",
+                            "minItems": 1,
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "description": "Babel release names mapped to arrays of concrete Elasticsearch index names selected for requests at startup and pinned until restart. Has the same release keys as babel.available_versions. The default release may span multiple concrete indices. Ambiguous releases are excluded; this map does not indicate backend health. Example index names are illustrative.",
+                          "example": {
+                            "2025sep1": ["nodenorm_2025sep1"],
+                            "2026jul22": ["nodenorm_2026jul22"]
+                          }
+                        },
                         "errors": {
                           "type": "object",
                           "additionalProperties": {
                             "type": "string"
                           },
-                          "description": "Present when discovery finds ambiguous releases. Errors are keyed by release name. Selecting an affected release returns HTTP 503; the release is excluded from babel.available_versions.",
+                          "description": "Present when discovery finds ambiguous releases. Errors are keyed by release name. Selecting an affected release returns HTTP 503; the release is excluded from both babel.available_versions and babel.indices.",
                           "example": {
                             "2026aug1": "Multiple indices declare this Babel release"
                           }
