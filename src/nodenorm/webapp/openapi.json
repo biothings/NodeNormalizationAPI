@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Node Normalization",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "x-translator": {
       "component": "Utility",
       "team": [
@@ -62,7 +62,7 @@
                     "version": {
                       "type": "string",
                       "description": "Node Normalization API version.",
-                      "example": "1.0.0"
+                      "example": "1.1.0"
                     },
                     "biolink_model_toolkit_version": {
                       "type": "string",

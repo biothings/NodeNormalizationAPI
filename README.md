@@ -66,8 +66,8 @@ after changing the environment configuration.
 
 ## Selecting a Babel release in Node Normalization
 
-Clients can select an available Babel release for each request. Omitting `babel_version`
-uses the configured default release.
+Starting with API version 1.1.0, clients can select an available Babel release for each
+request. Omitting `babel_version` uses the configured default release.
 
 - `GET /get_normalized_nodes`, `GET /get_semantic_types`, and both `GET` and `POST /get_setid`
   accept the optional `babel_version` query parameter.
@@ -99,7 +99,7 @@ index names:
 {
   "status": "running",
   "deployment_environment": "CI",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "biolink_model_toolkit_version": "v4.4.3",
   "babel": {
     "default_version": "2026jul22",
