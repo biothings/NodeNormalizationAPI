@@ -72,8 +72,8 @@ clients through CORS. Unknown, removed, or malformed selectors return HTTP 400 w
 available release names. Selecting a release with ambiguous metadata returns HTTP 503;
 an unavailable backend also returns an error. Requests never fall back to another release.
 
-`GET /status` groups release information under `babel`. Its `default` field names the
-default release, and `available` maps each available release to its release URL:
+`GET /status` groups release information under `babel`. Its `default_version` field names
+the default release, and `available_versions` maps each available release to its release URL:
 
 ```json
 {
@@ -81,8 +81,8 @@ default release, and `available` maps each available release to its release URL:
   "version": "1.0.0",
   "biolink_model_toolkit_version": "v4.4.3",
   "babel": {
-    "default": "2026jul22",
-    "available": {
+    "default_version": "2026jul22",
+    "available_versions": {
       "2025sep1": "https://github.com/NCATSTranslator/Babel/blob/main/releases/2025sep1/README.md",
       "2026jul22": "https://github.com/NCATSTranslator/Babel/blob/main/releases/2026jul22/README.md"
     }
@@ -93,7 +93,7 @@ default release, and `available` maps each available release to its release URL:
 Available releases come from Elasticsearch metadata, rather than a configured version
 list; they do not indicate backend health. When discovery finds ambiguous releases,
 `babel.errors` maps their names to error messages. Those releases are excluded from
-`babel.available`.
+`babel.available_versions`.
 
 ### Discovering available releases
 

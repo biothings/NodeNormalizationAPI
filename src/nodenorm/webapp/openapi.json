@@ -66,16 +66,16 @@
                     "babel": {
                       "type": "object",
                       "required": [
-                        "default",
-                        "available"
+                        "default_version",
+                        "available_versions"
                       ],
                       "properties": {
-                        "default": {
+                        "default_version": {
                           "type": "string",
-                          "description": "Babel release used when babel_version is omitted. Its release URL is available under the matching key in babel.available.",
+                          "description": "Babel release used when babel_version is omitted. Its release URL is available under the matching key in babel.available_versions.",
                           "example": "2026jul22"
                         },
-                        "available": {
+                        "available_versions": {
                           "type": "object",
                           "additionalProperties": {
                             "type": "string",
@@ -92,7 +92,7 @@
                           "additionalProperties": {
                             "type": "string"
                           },
-                          "description": "Present when discovery finds ambiguous releases. Errors are keyed by release name. Selecting an affected release returns HTTP 503; the release is excluded from babel.available.",
+                          "description": "Present when discovery finds ambiguous releases. Errors are keyed by release name. Selecting an affected release returns HTTP 503; the release is excluded from babel.available_versions.",
                           "example": {
                             "2026aug1": "Multiple indices declare this Babel release"
                           }

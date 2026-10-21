@@ -38,7 +38,7 @@ def load_endpoint_modules():
     modules = {}
     sys.modules["nodenorm.biolink"] = fake_biolink
     try:
-        for name in ("normalized_nodes", "set_identifiers", "semantic_types", "health"):
+        for name in ("normalized_nodes", "set_identifiers", "semantic_types", "status"):
             module_name = f"_babel_endpoint_{name}"
             module_path = Path(__file__).parents[1] / "src" / "nodenorm" / "handlers" / f"{name}.py"
             spec = importlib.util.spec_from_file_location(module_name, module_path)
@@ -125,7 +125,7 @@ class TestBabelEndpoints(AsyncHTTPTestCase):
             [
                 (r"/get_setid", handlers.set_identifiers.SetIdentifierHandler),
                 (r"/get_semantic_types", handlers.semantic_types.SemanticTypeHandler),
-                (r"/status", handlers.health.NodeNormHealthHandler),
+                (r"/status", handlers.status.NodeNormHealthHandler),
             ]
         )
         app.biothings = self.namespace
@@ -273,12 +273,12 @@ class TestBabelEndpoints(AsyncHTTPTestCase):
                 status = self.fetch("/status")
                 assert status.code == 200
                 body = json.loads(status.body)
-                assert body["babel"]["available"] == {
+                assert body["babel"]["available_versions"] == {
                     DEFAULT_VERSION: (
                         f"https://github.com/NCATSTranslator/Babel/blob/main/releases/{DEFAULT_VERSION}/README.md"
                     )
                 }
-                assert body["babel"]["default"] == DEFAULT_VERSION
+                assert body["babel"]["default_version"] == DEFAULT_VERSION
                 assert body["babel"].get("errors", {}) == releases.errors
                 assert ("errors" in body["babel"]) == bool(matching_indices)
                 assert set(releases.errors) == ({OLD_VERSION} if matching_indices else set())
@@ -303,15 +303,15 @@ class TestBabelEndpoints(AsyncHTTPTestCase):
         body = json.loads(response.body)
         assert body["status"] == "running"
         assert body["babel"] == {
-            "default": DEFAULT_VERSION,
-            "available": {
+            "default_version": DEFAULT_VERSION,
+            "available_versions": {
                 OLD_VERSION: f"https://github.com/NCATSTranslator/Babel/blob/main/releases/{OLD_VERSION}/README.md",
                 DEFAULT_VERSION: f"https://github.com/NCATSTranslator/Babel/blob/main/releases/{DEFAULT_VERSION}/README.md",
             },
         }
         assert set(body) == {"status", "version", "biolink_model_toolkit_version", "babel"}
         assert "backend" not in body
-        assert body["version"] == handlers.health.get_openapi_version()
+        assert body["version"] == handlers.status.get_openapi_version()
         assert body["biolink_model_toolkit_version"] == "test"
         assert "elasticsearch" not in body
         assert self.client.calls == [("get_mapping", {"index": [DEFAULT_INDEX]})]
@@ -330,12 +330,12 @@ class TestBabelEndpoints(AsyncHTTPTestCase):
         assert response.code == 200
         body = json.loads(response.body)
         assert body["status"] == "running"
-        assert body["babel"]["default"] == DEFAULT_VERSION
-        assert set(body["babel"]["available"]) == {OLD_VERSION, DEFAULT_VERSION}
+        assert body["babel"]["default_version"] == DEFAULT_VERSION
+        assert set(body["babel"]["available_versions"]) == {OLD_VERSION, DEFAULT_VERSION}
         assert "errors" not in body["babel"]
         assert "backend" not in body
         assert "elasticsearch" not in body
-        assert body["version"] == handlers.health.get_openapi_version()
+        assert body["version"] == handlers.status.get_openapi_version()
         assert body["biolink_model_toolkit_version"] == "test"
         assert self.client.calls == [("get_mapping", {"index": [DEFAULT_INDEX]})]
 

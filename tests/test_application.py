@@ -22,7 +22,7 @@ def build_application(options=None):
     handler_modules = {}
     for module_name, handler_name in (
         ("conflations", "ValidConflationsHandler"),
-        ("health", "NodeNormHealthHandler"),
+        ("status", "NodeNormHealthHandler"),
         ("normalized_nodes", "NormalizedNodesHandler"),
         ("semantic_types", "SemanticTypeHandler"),
         ("set_identifiers", "SetIdentifierHandler"),
