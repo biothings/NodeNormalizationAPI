@@ -34,8 +34,8 @@ class NodeNormHealthHandler(NodeNormalizationBaseHandler):
 
         releases = self.biothings.elasticsearch.babel
         babel_status = {
-            "default": releases.default_version,
-            "available": {version: get_babel_release_url(version) for version in releases.available_versions},
+            "default_version": releases.default_version,
+            "available_versions": {version: get_babel_release_url(version) for version in releases.available_versions},
         }
         if releases.errors:
             babel_status["errors"] = releases.errors
