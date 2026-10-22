@@ -448,7 +448,7 @@ class ReleaseElasticsearch:
         self.default_started = asyncio.Event()
         self.resume_default = asyncio.Event()
         self.sources = {}
-        for index, prefix in [("nodenorm", "OLD"), ("nodenorm-new", "NEW")]:
+        for index, prefix in [("nodenorm-older", "LEGACY"), ("nodenorm", "OLD"), ("nodenorm-new", "NEW")]:
             self.sources[index] = {
                 "INPUT:1": {
                     "identifiers": [{"i": f"{prefix}:BASE", "l": f"{prefix} base", "c": {"gp": ["PARTNER:1"]}}],
@@ -602,38 +602,86 @@ class TestBabelNormalizationHTTP(AsyncHTTPTestCase):
         assert response.code == 500
         assert [call["index"] for call in self.elasticsearch.calls] == [["nodenorm-new"]]
 
-    def test_unknown_or_ambiguous_release_is_rejected_before_normalization(self):
+    def test_unknown_discovered_release_is_rejected_before_normalization(self):
         def mapping(version):
             return {"mappings": {"_meta": {"src": {"nodenorm": {"version": version}}}}}
 
-        for matches in (0, 2):
-            self._app.biothings.elasticsearch.babel = BabelReleases.from_mappings(
-                "2025sep1",
+        self._app.biothings.elasticsearch.babel = BabelReleases.from_mappings(
+            "2025sep1", {"nodenorm": mapping("2025sep1")}
+        )
+        requests = [
+            ("/get_normalized_nodes?curie=INPUT%3A1&babel_version=2026jul22", {}),
+            (
+                "/get_normalized_nodes",
                 {
-                    "nodenorm": mapping("2025sep1"),
-                    **{f"new-{number}": mapping("2026jul22") for number in range(matches)},
+                    "method": "POST",
+                    "headers": {"Content-Type": "application/json"},
+                    "body": json.dumps({"curies": ["INPUT:1"], "babel_version": "2026jul22"}),
                 },
+            ),
+        ]
+        for url, options in requests:
+            response = self.fetch(url, **options)
+            assert response.code == 400
+            assert b"2025sep1" in response.body
+            assert b"Supported releases" in response.body
+            assert self.elasticsearch.calls == []
+
+    def test_default_uses_alias_and_nondefault_uses_latest_build_after_alias_switch(self):
+        def mapping(version, build_date):
+            return {"mappings": {"_meta": {"build_date": build_date, "src": {"nodenorm": {"version": version}}}}}
+
+        mappings = {
+            "nodenorm-older": mapping("2025sep1", "2025-11-06T00:00:00Z"),
+            "nodenorm": mapping("2025sep1", "2026-06-01T00:00:00Z"),
+            "nodenorm-new": mapping("2026jul22", "2026-08-09T00:00:00Z"),
+        }
+        # September follows its older alias target while it is the default.
+        # After July becomes default, September uses the newer build despite
+        # the older copy having the lexicographically greater index name.
+        for alias_index, default_version, default_prefix, september_prefix, september_index in [
+            ("nodenorm-older", "2025sep1", "LEGACY", "LEGACY", "nodenorm-older"),
+            ("nodenorm-new", "2026jul22", "NEW", "OLD", "nodenorm"),
+        ]:
+            namespace = NodeNormalizationAPINamespace.__new__(NodeNormalizationAPINamespace)
+            namespace.config = SimpleNamespace(
+                elasticsearch={
+                    "ES_HOST": "http://test:9200",
+                    "ES_ARGS": {},
+                    "ES_INDEX": "",
+                    "ES_ALIAS": "moving-default",
+                }
             )
-            requests = [
-                ("/get_normalized_nodes?curie=INPUT%3A1&babel_version=2026jul22", {}),
-                (
+            client = Mock()
+            client.indices.exists_alias.return_value = True
+            client.indices.get_mapping.side_effect = [{alias_index: mappings[alias_index]}, mappings]
+            with patch("nodenorm.namespace.connections.es") as connections:
+                connections.get_client.return_value = client
+                connections.get_async_client.return_value = self.elasticsearch
+                self._app.biothings.elasticsearch = namespace.configure_elasticsearch()
+
+            self.elasticsearch.calls.clear()
+            expected_indices = []
+            for selector, version, prefix, index in [
+                (None, default_version, default_prefix, alias_index),
+                ("2025sep1", "2025sep1", september_prefix, september_index),
+                ("2026jul22", "2026jul22", "NEW", "nodenorm-new"),
+            ]:
+                query_selector = "" if selector is None else f"&babel_version={selector}"
+                response = self.fetch(f"/get_normalized_nodes?curie=INPUT%3A1&conflate=false{query_selector}")
+                self.assert_release_response(response, version, prefix)
+                body_selector = {} if selector is None else {"babel_version": selector}
+                response = self.fetch(
                     "/get_normalized_nodes",
-                    {
-                        "method": "POST",
-                        "headers": {"Content-Type": "application/json"},
-                        "body": json.dumps({"curies": ["INPUT:1"], "babel_version": "2026jul22"}),
-                    },
-                ),
-            ]
-            for url, options in requests:
-                response = self.fetch(url, **options)
-                assert response.code == (503 if matches else 400)
-                if matches:
-                    assert b"2026jul22" in response.body
-                else:
-                    assert b"2025sep1" in response.body
-                    assert b"Supported releases" in response.body
-                assert self.elasticsearch.calls == []
+                    method="POST",
+                    headers={"Content-Type": "application/json"},
+                    body=json.dumps({"curies": ["INPUT:1"], "conflate": False, **body_selector}),
+                )
+                self.assert_release_response(response, version, prefix)
+                expected_indices.extend([[index], [index]])
+
+            assert [call["index"] for call in self.elasticsearch.calls] == expected_indices
+            assert self._app.biothings.elasticsearch.indices == [alias_index]
 
     @gen_test
     async def test_overlapping_requests_keep_release_and_conflations_isolated(self):

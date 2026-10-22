@@ -3,11 +3,14 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from nodenorm.babel import BabelReleaseUnavailable, BabelReleases
+from nodenorm.babel import BabelReleases
 from nodenorm.namespace import NodeNormalizationAPINamespace
 
 
 RELEASES = {"2025sep1": "annotator-nodenorm", "2026jul22": "nodenorm-2026jul22"}
+OLD_INDEX = "nodenorm_20260601_cuyvh23o_202609301231"
+OLDER_INDEX = "nodenorm_20251106_lv86fxt0"
+NEW_INDEX = "nodenorm_20260809_qvdpis31"
 
 
 def test_release_selection_keeps_an_explicit_default():
@@ -84,8 +87,8 @@ def namespace_config(babel=None):
     return namespace
 
 
-def mapping(version):
-    return {"mappings": {"_meta": {"src": {"nodenorm": {"version": version}}}}}
+def mapping(version, build_date=None):
+    return {"mappings": {"_meta": {"build_date": build_date, "src": {"nodenorm": {"version": version}}}}}
 
 
 @pytest.mark.parametrize("index_exists,target", [(True, "legacy"), (False, "alias")])
@@ -111,24 +114,33 @@ def test_legacy_configuration_resolves_configured_target_to_concrete_index(index
     connections.get_client.assert_called_once_with("http://test:9200")
     connections.get_async_client.assert_called_once_with("http://test:9200")
     assert client.indices.get_mapping.call_args_list[0].kwargs == {"index": [target]}
-    assert client.indices.get_mapping.call_args_list[1].kwargs == {"filter_path": "*.mappings._meta.src.nodenorm"}
+    assert client.indices.get_mapping.call_args_list[1].kwargs == {"filter_path": "*.mappings._meta"}
     assert namespace.config.elasticsearch["ES_INDEX"] == "legacy"
     assert namespace.config.elasticsearch["ES_ALIAS"] == "alias"
 
 
-def test_alias_rollover_keeps_running_catalog_pinned_and_refreshes_on_startup():
+def test_alias_rollover_preserves_its_exact_default_and_selects_latest_builds_for_other_releases():
     namespace = namespace_config()
     namespace.config.elasticsearch["ES_INDEX"] = ""
     client = Mock()
     client.indices.exists_alias.return_value = True
-    all_mappings = {"old-build": mapping("2025sep1"), "new-build": mapping("2026jul22")}
-    alias_mappings = {"old-build": mapping("2025sep1")}
+    all_mappings = {
+        OLD_INDEX: mapping("2025sep1", "2026-09-30T12:31:00Z"),
+        OLDER_INDEX: mapping("2025sep1", "2025-11-06T00:00:00Z"),
+        NEW_INDEX: mapping("2026jul22", "2026-08-09T00:00:00Z"),
+    }
+    for index in (OLD_INDEX, OLDER_INDEX):
+        all_mappings[index]["mappings"]["_meta"]["src"]["nodenorm"] = {
+            "version": None,
+            "url": "https://example.org/releases/2025sep1/",
+        }
+    alias_index = OLDER_INDEX
 
     def get_mapping(*, index=None, filter_path=None):
         if index is not None:
             assert index == ["alias"]
-            return alias_mappings
-        assert filter_path == "*.mappings._meta.src.nodenorm"
+            return {alias_index: all_mappings[alias_index]}
+        assert filter_path == "*.mappings._meta"
         return all_mappings
 
     client.indices.get_mapping.side_effect = get_mapping
@@ -136,41 +148,25 @@ def test_alias_rollover_keeps_running_catalog_pinned_and_refreshes_on_startup():
         connections.get_client.return_value = client
         running = namespace.configure_elasticsearch()
 
-        alias_mappings = {"new-build": mapping("2026jul22")}
-        assert running.indices == ["old-build"]
+        assert running.indices == [OLDER_INDEX]
         assert running.babel.default_version == "2025sep1"
-        assert running.babel.resolve().search_indices == ["old-build"]
-        assert running.babel.resolve("2025sep1").search_indices == ["old-build"]
+        assert running.babel.resolve().search_indices == [OLDER_INDEX]
+        assert running.babel.resolve("2025sep1").search_indices == [OLDER_INDEX]
 
+        alias_index = NEW_INDEX
         restarted = namespace.configure_elasticsearch()
 
-    assert restarted.indices == ["new-build"]
+    assert restarted.indices == [NEW_INDEX]
     assert restarted.babel.default_version == "2026jul22"
-    assert restarted.babel.resolve().search_indices == ["new-build"]
-    assert restarted.babel.resolve("2025sep1").search_indices == ["old-build"]
+    assert restarted.babel.resolve().search_indices == [NEW_INDEX]
+    assert restarted.babel.resolve("2025sep1").search_indices == [OLD_INDEX]
+    assert restarted.babel.available_versions == ["2025sep1", "2026jul22"]
+    assert running.indices == [OLDER_INDEX]
+    assert running.babel.resolve().search_indices == [OLDER_INDEX]
+    assert running.babel.resolve("2025sep1").search_indices == [OLDER_INDEX]
+    assert running.babel.errors == restarted.babel.errors == {}
     assert namespace.config.elasticsearch["ES_INDEX"] == ""
     assert namespace.config.elasticsearch["ES_ALIAS"] == "alias"
-
-
-def test_explicit_default_discovers_targets_from_the_configured_cluster():
-    namespace = namespace_config({"default_version": "2026jul22"})
-    client = Mock()
-    client.indices.get_mapping.return_value = {
-        "old-release-build": mapping("2025sep1"),
-        "new-release-build": mapping("2026jul22"),
-    }
-
-    with patch("nodenorm.namespace.connections.es") as connections:
-        connections.get_client.return_value = client
-        elasticsearch = namespace.configure_elasticsearch()
-
-    assert elasticsearch.indices == ["new-release-build"]
-    assert elasticsearch.babel.resolve("2025sep1").index == "old-release-build"
-    connections.get_client.assert_called_once_with("http://test:9200")
-    connections.get_async_client.assert_called_once_with("http://test:9200")
-    client.indices.exists.assert_not_called()
-    client.indices.exists_alias.assert_not_called()
-    client.indices.get_mapping.assert_called_once_with(filter_path="*.mappings._meta.src.nodenorm")
 
 
 @pytest.mark.parametrize("new_version", ["2026jul22", "2027jan1"])
@@ -193,28 +189,20 @@ def test_new_metadata_release_is_available_without_changing_configuration(new_ve
     assert elasticsearch.babel.errors == {}
 
 
-@pytest.mark.parametrize("matches", [0, 2])
-def test_unavailable_explicit_default_blocks_startup(matches):
-    namespace = namespace_config({"default_version": "2026jul22"})
-    client = Mock()
-    client.indices.get_mapping.return_value = {
-        "old-release-build": mapping("2025sep1"),
-        **{f"new-release-build-{number}": mapping("2026jul22") for number in range(matches)},
-    }
-
-    with patch("nodenorm.namespace.connections.es") as connections:
-        connections.get_client.return_value = client
-        with pytest.raises(BabelReleaseUnavailable):
-            namespace.configure_elasticsearch()
-
-
-def test_omitted_default_uses_existing_target_metadata_and_discovers_other_releases():
+def test_multi_index_alias_preserves_all_default_backing_indices_despite_newer_builds():
     namespace = namespace_config({})
     client = Mock()
     client.indices.exists.return_value = False
     client.indices.exists_alias.return_value = True
-    default_mappings = {"old-a": mapping("2025sep1"), "old-b": mapping("2025sep1")}
-    all_mappings = {**default_mappings, "new-release-build": mapping("2026jul22")}
+    default_mappings = {
+        "old-a": mapping("2025sep1", "2025-11-06T00:00:00Z"),
+        "old-b": mapping("2025sep1", "2025-11-06T00:00:00Z"),
+    }
+    all_mappings = {
+        **default_mappings,
+        "old-c": mapping("2025sep1", "2026-09-30T12:31:00Z"),
+        "new-release-build": mapping("2026jul22"),
+    }
     client.indices.get_mapping.side_effect = [default_mappings, all_mappings]
 
     with patch("nodenorm.namespace.connections.es") as connections:
@@ -225,10 +213,11 @@ def test_omitted_default_uses_existing_target_metadata_and_discovers_other_relea
     assert elasticsearch.babel.default_version == "2025sep1"
     assert elasticsearch.babel.resolve().index == ("old-a", "old-b")
     assert elasticsearch.babel.resolve().search_indices == ["old-a", "old-b"]
+    assert elasticsearch.babel.resolve("2025sep1").search_indices == ["old-a", "old-b"]
     assert elasticsearch.babel.resolve("2026jul22").index == "new-release-build"
     assert elasticsearch.babel.errors == {}
     assert client.indices.get_mapping.call_args_list[0].kwargs == {"index": ["alias"]}
-    assert client.indices.get_mapping.call_args_list[1].kwargs == {"filter_path": "*.mappings._meta.src.nodenorm"}
+    assert client.indices.get_mapping.call_args_list[1].kwargs == {"filter_path": "*.mappings._meta"}
 
 
 def test_existing_default_is_included_even_when_absent_from_cluster_mapping_scan():
@@ -255,11 +244,14 @@ def test_existing_default_is_included_even_when_absent_from_cluster_mapping_scan
         [],
         {"releases": RELEASES, "default_version": "2025sep1"},
         {"unknown_option": True},
+        {"indices": {"2025sep1": OLD_INDEX}},
         {"supported_versions": ["2025sep1"]},
         {"supported_versions": None},
         {"supported_versions": "2025sep1"},
         {"supported_versions": {}},
         {"supported_versions": []},
+        {"default_version": "2025sep1"},
+        {"default_version": "2026jul22"},
         {"default_version": None},
         {"default_version": []},
         {"default_version": 42},

@@ -14,7 +14,7 @@ from biothings.web import connections
 from biothings.web.services.metadata import BiothingsESMetadata
 
 import nodenorm
-from nodenorm.babel import BabelReleases, get_babel_version, validate_babel_version
+from nodenorm.babel import BabelReleases, get_babel_version
 
 
 logger = logging.getLogger(__name__)
@@ -72,13 +72,10 @@ class NodeNormalizationAPINamespace:
         babel_configuration = getattr(self.config, "babel", {})
         if not isinstance(babel_configuration, dict):
             raise ValueError("babel configuration must be an object")
-        default_version = None
         if babel_configuration:
-            if set(babel_configuration) - {"default_version"}:
-                raise ValueError("babel configuration accepts only optional default_version; releases are discovered")
-            default_version = babel_configuration.get("default_version")
-            # Validate the optional override before creating any connections.
-            validate_babel_version(default_version)
+            raise ValueError(
+                "Babel releases are discovered from Elasticsearch; configure the default with ES_INDEX / ES_ALIAS"
+            )
 
         elasticsearch_namespace.client = connections.es.get_client(
             elasticsearch_configuration["ES_HOST"], **elasticsearch_configuration["ES_ARGS"]
@@ -86,22 +83,23 @@ class NodeNormalizationAPINamespace:
         elasticsearch_namespace.async_client = connections.es.get_async_client(
             elasticsearch_configuration["ES_HOST"], **elasticsearch_configuration["ES_ARGS"]
         )
-        default_index = None
-        if default_version is None:
-            # Resolve the configured default once. Query its concrete backing
-            # indices so moving an alias cannot change a selected release.
-            elasticsearch_namespace.indices = self._validate_elasticsearch_index(elasticsearch_namespace)
-            mappings = elasticsearch_namespace.client.indices.get_mapping(index=elasticsearch_namespace.indices)
-            versions = {get_babel_version(mapping) for mapping in mappings.values()}
-            if len(versions) != 1:
-                raise ValueError("The default Elasticsearch target must contain exactly one Babel release")
-            default_version = versions.pop()
-            backing_indices = tuple(mappings)
-            default_index = backing_indices[0] if len(backing_indices) == 1 else backing_indices
-        mappings = elasticsearch_namespace.client.indices.get_mapping(filter_path="*.mappings._meta.src.nodenorm")
-        releases = BabelReleases.from_mappings(default_version, mappings, default_index=default_index)
-        # Only the default must resolve at startup. Ambiguous optional releases
-        # fail their selected requests without changing the default.
+        # Preserve the alias's exact targets for the default release, even when
+        # the cluster contains a newer build of that Babel release.
+        configured_indices = self._validate_elasticsearch_index(elasticsearch_namespace)
+        default_mappings = elasticsearch_namespace.client.indices.get_mapping(index=configured_indices)
+        versions = {get_babel_version(mapping) for mapping in default_mappings.values()}
+        if len(versions) != 1:
+            raise ValueError("The default Elasticsearch target must contain exactly one Babel release")
+        default_version = versions.pop()
+        backing_indices = tuple(default_mappings)
+        default_index = backing_indices[0] if len(backing_indices) == 1 else backing_indices
+        mappings = elasticsearch_namespace.client.indices.get_mapping(filter_path="*.mappings._meta")
+        # Preserve targets resolved above if the cluster-wide scan omits them.
+        # Prefer the scan's metadata when an index is present in both responses.
+        releases = BabelReleases.from_mappings(
+            default_version, {**default_mappings, **mappings}, default_index=default_index
+        )
+        # Pin every selected concrete index until restart.
         elasticsearch_namespace.indices = releases.resolve().search_indices
         elasticsearch_namespace.babel = releases
         return elasticsearch_namespace

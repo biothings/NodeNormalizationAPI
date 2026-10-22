@@ -24,7 +24,6 @@
             "request_timeout": 60
         }
     },
-    "babel": {},
     "telemetry": {
         "OPENTELEMETRY_ENABLED": false,
         "OPENTELEMETRY_SERVICE_NAME": "NodeNorm",

@@ -1,6 +1,7 @@
 import logging
 import re
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Union
 from urllib.parse import urlparse
 
@@ -19,8 +20,25 @@ def validate_babel_version(version):
         raise ValueError("Babel release names must be nonempty ASCII strings without whitespace")
 
 
+def _index_build_order(index, index_mapping):
+    """Rank dated builds first, then break ties consistently by index name."""
+    build_date = index_mapping["mappings"]["_meta"].get("build_date")
+    if isinstance(build_date, str):
+        try:
+            # Python <3.11 does not accept the ISO UTC suffix directly.
+            if build_date.endswith("Z"):
+                build_date = build_date[:-1] + "+00:00"
+            parsed = datetime.fromisoformat(build_date)
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            return True, parsed.astimezone(timezone.utc), index
+        except (ValueError, OverflowError):
+            pass
+    return False, datetime.min.replace(tzinfo=timezone.utc), index
+
+
 class BabelReleaseUnavailable(RuntimeError):
-    """A supported release cannot be uniquely resolved from index metadata."""
+    """A supported release has no discoverable Elasticsearch target."""
 
 
 @dataclass(frozen=True)
@@ -81,15 +99,17 @@ class BabelReleases:
         unavailable = {}
         for version, indices in candidates.items():
             if version == default_version and default_index is not None:
-                # The configured default already selects concrete backing indices,
-                # including when the cluster holds another copy of that release.
+                # The default alias is authoritative, including when it selects
+                # an older build or several indices of the same release.
                 releases[version] = default_index
-            elif len(indices) == 1:
-                releases[version] = indices[0]
             elif not indices:
                 unavailable[version] = f"No index metadata identifies Babel release {version}"
             else:
-                unavailable[version] = f"Multiple indices identify Babel release {version}: {', '.join(sorted(indices))}"
+                # Releases outside the default alias select their newest build.
+                selected = max(indices, key=lambda index: _index_build_order(index, mappings[index]))
+                releases[version] = selected
+                if len(indices) > 1:
+                    logger.info("Selected index %s for Babel release %s from %s", selected, version, sorted(indices))
         return cls(default_version, releases, unavailable)
 
     @property

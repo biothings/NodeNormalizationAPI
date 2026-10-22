@@ -87,8 +87,8 @@ For example, select `2025sep1` with
 
 Successful data responses include `X-Babel-Version`, which is also exposed to browser
 clients through CORS. Unknown, removed, or malformed selectors return HTTP 400 with the
-available release names. Selecting a release with ambiguous metadata returns HTTP 503;
-an unavailable backend also returns an error. Requests never fall back to another release.
+available release names. An unavailable backend returns an error. Requests never
+fall back to another release.
 
 `GET /status` groups release information under `babel`. Its `default_version` field names
 the default release, `available_versions` maps each available release to its release URL,
@@ -115,14 +115,11 @@ index names:
 }
 ```
 
-Index names in this example are illustrative. Each `indices` array reports the targets
-selected at startup and pinned until restart. A default alias can select multiple concrete
-indices, so its array may contain more than one name.
-
+Index names in this example are illustrative. Each `indices` array contains the
+concrete targets selected at startup and pinned until restart. The default release
+uses every backing index of its configured alias; other releases select one index.
 Available releases come from Elasticsearch metadata, rather than a configured version
-list; these maps do not indicate backend health. When discovery finds ambiguous releases,
-`babel.errors` maps their names to error messages. Those releases are excluded from
-both `babel.available_versions` and `babel.indices`.
+list; these maps do not indicate backend health.
 
 ### Discovering available releases
 
@@ -131,29 +128,34 @@ from `mappings._meta.src.nodenorm` metadata on the associated cluster. No versio
 version-to-index mapping, or per-release alias is required. The client's Elasticsearch
 permissions must allow reading mappings across that cluster. Discovery uses an explicit
 `version` field, or a dated release tag in the legacy source URL; it does not infer
-versions from index names. Unrelated indices and invalid metadata are ignored.
+versions from index names. Unrelated indices and invalid release metadata are ignored.
 
-By default, `ES_INDEX` / `ES_ALIAS` still selects the default target. Its metadata must
-identify a release; this configured target also disambiguates the default if several
-indices declare that version. The default is pinned to the concrete backing indices
-resolved at startup, so moving an alias takes effect after restart. A default alias
-may span multiple indices if all declare the same release. Other available versions
-must each identify one concrete index. An optional top-level `babel` object in the
-server JSON configuration supplied with `--conf` can override the default:
+For supported releases outside the default alias, group indices by their Babel
+release metadata and choose one build using this rule:
 
-```json
-{
-  "babel": {
-    "default_version": "2026jul22"
-  }
-}
-```
+1. Prefer the newest valid ISO build date in `mappings._meta.build_date`. Compare dates
+   in UTC; timestamps without a timezone are treated as UTC. A valid date ranks above
+   missing or malformed dates.
+2. If build dates are equal, or all candidates lack valid dates, choose the
+   lexicographically greatest concrete index name. This fallback provides a stable
+   ordering; it does not establish the age or release of an index.
 
-The override must name a discovered release with a unique match. Configuration and
-discovery are loaded at startup. Adding a release index makes it available after
-restart; the default changes only when the configured target, alias, or default
-override changes and the service restarts. Restart also refreshes removed releases
-and changed metadata. Keep indices serving existing processes until the restart
-rollout completes; removing an index earlier makes requests using it fail.
-Verify the reported versions and sample results before rollout; discovery relies on
-metadata accurately describing each index's contents.
+The default is different: `ES_INDEX` / `ES_ALIAS` is authoritative for both its
+release and its exact concrete backing indices. All targets must identify the same
+Babel release. The default keeps those targets even if newer builds exist elsewhere
+on the cluster; a multi-index default queries all its backing indices. Explicitly
+requesting the default Babel version uses those same alias targets. After the alias
+moves to another release and the API restarts, the former default becomes a supported
+nondefault release and uses the build-date rule above.
+
+The default release has no separate Babel configuration override. Configuration and
+metadata discovery are loaded at startup. Adding a release or a newer build makes
+it available after restart; adding a release does not automatically change the
+default. To change the default, move the configured alias (or change the configured
+default target) and restart.
+
+All selected concrete indices stay pinned until restart, so moving an alias cannot
+change queries in a running process. Keep indices serving existing processes until
+the restart rollout completes; removing an index earlier makes requests using it fail.
+Verify `/status` and sample results before rollout; discovery relies on metadata
+accurately describing each index's contents.

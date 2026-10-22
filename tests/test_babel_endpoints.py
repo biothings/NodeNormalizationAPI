@@ -15,8 +15,9 @@ from nodenorm.babel import BabelReleases
 
 DEFAULT_VERSION = "2026jul22"
 OLD_VERSION = "2025sep1"
-DEFAULT_INDEX = "nodenorm_new"
-OLD_INDEX = "nodenorm_old"
+DEFAULT_INDEX = "nodenorm_20260809_qvdpis31"
+OLD_INDEX = "nodenorm_20260601_cuyvh23o_202609301231"
+OLDER_INDEX = "nodenorm_20251106_lv86fxt0"
 
 
 class FakeBiolinkToolkit:
@@ -73,13 +74,13 @@ class FakeAsyncElasticsearch:
         self.calls.append((operation, kwargs))
         index = kwargs.get("index")
         if index is not None:
-            assert index in ([DEFAULT_INDEX], [OLD_INDEX])
+            assert index in ([DEFAULT_INDEX], [OLD_INDEX], [OLDER_INDEX])
             if index == [self.failed_index]:
                 raise RuntimeError("selected release is unavailable")
 
     async def msearch(self, **kwargs):
         self.record("msearch", kwargs)
-        prefix = "OLD" if kwargs["index"] == [OLD_INDEX] else "NEW"
+        prefix = "NEW" if kwargs["index"] == [DEFAULT_INDEX] else "OLD"
         responses = []
         for query in kwargs["searches"][1::2]:
             curie = query["query"]["bool"]["filter"][0]["terms"]["identifiers.i"][0]
@@ -97,12 +98,12 @@ class FakeAsyncElasticsearch:
 
     async def search(self, **kwargs):
         self.record("search", kwargs)
-        biolink_type = "biolink:Disease" if kwargs["index"] == [OLD_INDEX] else "biolink:Gene"
+        biolink_type = "biolink:Gene" if kwargs["index"] == [DEFAULT_INDEX] else "biolink:Disease"
         return SimpleNamespace(body={"aggregations": {"unique_types": {"buckets": [{"key": biolink_type}]}}})
 
     async def get_mapping(self, **kwargs):
         self.record("get_mapping", kwargs)
-        version = OLD_VERSION if kwargs["index"] == [OLD_INDEX] else DEFAULT_VERSION
+        version = DEFAULT_VERSION if kwargs["index"] == [DEFAULT_INDEX] else OLD_VERSION
         return {kwargs["index"][0]: {"mappings": {"_meta": {"src": {"nodenorm": {"version": version}}}}}}
 
     async def nodes(self, **kwargs):
@@ -234,61 +235,46 @@ class TestBabelEndpoints(AsyncHTTPTestCase):
         assert len(self.client.calls) == 1
         assert self.client.calls[0][1]["index"] == [OLD_INDEX]
 
-    def test_unknown_or_ambiguous_release_is_rejected_before_lookup(self):
-        def mapping(version):
-            return {"mappings": {"_meta": {"src": {"nodenorm": {"version": version}}}}}
+    def test_unknown_release_is_rejected_before_lookup(self):
+        mappings = {
+            DEFAULT_INDEX: {"mappings": {"_meta": {"src": {"nodenorm": {"version": DEFAULT_VERSION}}}}}
+        }
+        releases = BabelReleases.from_mappings(DEFAULT_VERSION, mappings)
+        self.namespace.elasticsearch.babel = releases
+        requests = [
+            (f"/get_setid?curie=INPUT:1&babel_version={OLD_VERSION}", {}),
+            (
+                f"/get_setid?babel_version={OLD_VERSION}",
+                {
+                    "method": "POST",
+                    "headers": {"Content-Type": "application/json"},
+                    "body": json.dumps([{"curies": ["INPUT:1"]}]),
+                },
+            ),
+            (f"/get_semantic_types?babel_version={OLD_VERSION}", {}),
+        ]
+        for url, options in requests:
+            response = self.fetch(url, **options)
+            assert response.code == 400
+            assert DEFAULT_VERSION in response.body.decode()
+            assert b"Supported releases" in response.body
+            assert self.client.calls == []
 
-        for matching_indices in (0, 2):
-            with self.subTest(matching_indices=matching_indices):
-                mappings = {
-                    DEFAULT_INDEX: mapping(DEFAULT_VERSION),
-                    **{f"old-build-{number}": mapping(OLD_VERSION) for number in range(matching_indices)},
-                }
-                releases = BabelReleases.from_mappings(
-                    DEFAULT_VERSION, mappings, default_index=DEFAULT_INDEX
-                )
-                self.namespace.elasticsearch.babel = releases
-                self.client.calls.clear()
+        status = self.fetch("/status")
+        assert status.code == 200
+        body = json.loads(status.body)
+        assert body["babel"]["available_versions"] == {
+            DEFAULT_VERSION: (
+                f"https://github.com/NCATSTranslator/Babel/blob/main/releases/{DEFAULT_VERSION}/README.md"
+            )
+        }
+        assert body["babel"]["default_version"] == DEFAULT_VERSION
+        assert body["babel"]["indices"] == {DEFAULT_VERSION: [DEFAULT_INDEX]}
+        assert "errors" not in body["babel"]
 
-                requests = [
-                    (f"/get_setid?curie=INPUT:1&babel_version={OLD_VERSION}", {}),
-                    (
-                        f"/get_setid?babel_version={OLD_VERSION}",
-                        {
-                            "method": "POST",
-                            "headers": {"Content-Type": "application/json"},
-                            "body": json.dumps([{"curies": ["INPUT:1"]}]),
-                        },
-                    ),
-                    (f"/get_semantic_types?babel_version={OLD_VERSION}", {}),
-                ]
-                for url, options in requests:
-                    response = self.fetch(url, **options)
-                    assert response.code == (503 if matching_indices else 400)
-                    if matching_indices:
-                        assert OLD_VERSION in response.body.decode()
-                    else:
-                        assert DEFAULT_VERSION in response.body.decode()
-                        assert b"Supported releases" in response.body
-                    assert self.client.calls == []
-
-                status = self.fetch("/status")
-                assert status.code == 200
-                body = json.loads(status.body)
-                assert body["babel"]["available_versions"] == {
-                    DEFAULT_VERSION: (
-                        f"https://github.com/NCATSTranslator/Babel/blob/main/releases/{DEFAULT_VERSION}/README.md"
-                    )
-                }
-                assert body["babel"]["default_version"] == DEFAULT_VERSION
-                assert body["babel"]["indices"] == {DEFAULT_VERSION: [DEFAULT_INDEX]}
-                assert body["babel"].get("errors", {}) == releases.errors
-                assert ("errors" in body["babel"]) == bool(matching_indices)
-                assert set(releases.errors) == ({OLD_VERSION} if matching_indices else set())
-
-                default = self.assert_selected_release(self.fetch("/get_setid?curie=INPUT:1"), DEFAULT_VERSION)
-                assert default["normalized_curies"] == ["NEW:1"]
-                assert self.client.calls[-1][1]["index"] == [DEFAULT_INDEX]
+        default = self.assert_selected_release(self.fetch("/get_setid?curie=INPUT:1"), DEFAULT_VERSION)
+        assert default["normalized_curies"] == ["NEW:1"]
+        assert self.client.calls[-1][1]["index"] == [DEFAULT_INDEX]
 
     def test_status_and_requests_share_metadata_discovered_releases(self):
         self.namespace.elasticsearch.babel = BabelReleases.from_mappings(
@@ -297,7 +283,6 @@ class TestBabelEndpoints(AsyncHTTPTestCase):
                 DEFAULT_INDEX: {"mappings": {"_meta": {"src": {"nodenorm": {"version": DEFAULT_VERSION}}}}},
                 OLD_INDEX: {"mappings": {"_meta": {"src": {"nodenorm": {"version": OLD_VERSION}}}}},
             },
-            default_index=DEFAULT_INDEX,
         )
 
         response = self.fetch(f"/status?babel_version={OLD_VERSION}")
@@ -327,18 +312,88 @@ class TestBabelEndpoints(AsyncHTTPTestCase):
         assert selected["normalized_curies"] == ["OLD:1"]
         assert self.client.calls[-1][1]["index"] == [OLD_INDEX]
 
-    def test_status_reports_only_the_pinned_indices_for_a_multi_index_default(self):
-        def mapping(version):
-            return {"mappings": {"_meta": {"src": {"nodenorm": {"version": version}}}}}
+    def test_status_and_requests_use_the_same_selected_build_among_duplicate_indices(self):
+        def mapping(version, build_date):
+            return {"mappings": {"_meta": {"build_date": build_date, "src": {"nodenorm": {"version": version}}}}}
+
+        self.namespace.elasticsearch.babel = BabelReleases.from_mappings(
+            DEFAULT_VERSION,
+            {
+                DEFAULT_INDEX: mapping(DEFAULT_VERSION, "2026-08-09T00:00:00Z"),
+                "z-older-default-build": mapping(DEFAULT_VERSION, "2026-08-01T00:00:00Z"),
+                OLD_INDEX: mapping(OLD_VERSION, "2026-09-30T12:31:00Z"),
+                OLDER_INDEX: mapping(OLD_VERSION, "2025-11-06T00:00:00Z"),
+            },
+        )
+
+        response = self.fetch("/status")
+
+        assert response.code == 200
+        body = json.loads(response.body)
+        assert body["babel"]["default_version"] == DEFAULT_VERSION
+        assert set(body["babel"]["available_versions"]) == {OLD_VERSION, DEFAULT_VERSION}
+        assert body["babel"]["indices"] == {OLD_VERSION: [OLD_INDEX], DEFAULT_VERSION: [DEFAULT_INDEX]}
+        assert "errors" not in body["babel"]
+        assert self.client.calls == [("get_mapping", {"index": [DEFAULT_INDEX]})]
+
+        self.client.calls.clear()
+        selected = self.assert_selected_release(
+            self.fetch(f"/get_setid?curie=INPUT:1&babel_version={OLD_VERSION}"), OLD_VERSION
+        )
+        semantic_types = self.assert_selected_release(
+            self.fetch(f"/get_semantic_types?babel_version={OLD_VERSION}"), OLD_VERSION
+        )
+        default = self.assert_selected_release(self.fetch("/get_setid?curie=INPUT:1"), DEFAULT_VERSION)
+
+        assert selected["normalized_curies"] == ["OLD:1"]
+        assert set(semantic_types["semantic_types"]["types"]) == {"biolink:Disease", "biolink:disease"}
+        assert default["normalized_curies"] == ["NEW:1"]
+        assert [(operation, kwargs["index"]) for operation, kwargs in self.client.calls] == [
+            ("msearch", [OLD_INDEX]),
+            ("search", [OLD_INDEX]),
+            ("msearch", [DEFAULT_INDEX]),
+        ]
+        assert self.namespace.elasticsearch.indices == [DEFAULT_INDEX]
+
+    def test_default_and_explicit_selector_use_alias_build_even_when_a_newer_copy_exists(self):
+        def mapping(version, build_date):
+            return {"mappings": {"_meta": {"build_date": build_date, "src": {"nodenorm": {"version": version}}}}}
+
+        self.namespace.elasticsearch.babel = BabelReleases.from_mappings(
+            OLD_VERSION,
+            {
+                OLD_INDEX: mapping(OLD_VERSION, "2026-09-30T12:31:00Z"),
+                OLDER_INDEX: mapping(OLD_VERSION, "2025-11-06T00:00:00Z"),
+                DEFAULT_INDEX: mapping(DEFAULT_VERSION, "2026-08-09T00:00:00Z"),
+            },
+            default_index=OLDER_INDEX,
+        )
+        self.namespace.elasticsearch.indices = [OLDER_INDEX]
+
+        for url in ("/get_setid?curie=INPUT:1", f"/get_setid?curie=INPUT:1&babel_version={OLD_VERSION}"):
+            body = self.assert_selected_release(self.fetch(url), OLD_VERSION)
+            assert body["normalized_curies"] == ["OLD:1"]
+        assert [kwargs["index"] for _, kwargs in self.client.calls] == [[OLDER_INDEX], [OLDER_INDEX]]
+
+        response = self.fetch("/status")
+
+        assert response.code == 200
+        body = json.loads(response.body)
+        assert body["babel"]["default_version"] == OLD_VERSION
+        assert body["babel"]["indices"] == {OLD_VERSION: [OLDER_INDEX], DEFAULT_VERSION: [DEFAULT_INDEX]}
+
+    def test_status_reports_only_the_alias_backing_indices_for_a_multi_index_default(self):
+        def mapping(version, build_date):
+            return {"mappings": {"_meta": {"build_date": build_date, "src": {"nodenorm": {"version": version}}}}}
 
         default_indices = ["default-build-a", "default-build-b"]
-        default_mappings = {index: mapping(DEFAULT_VERSION) for index in default_indices}
+        default_mappings = {index: mapping(DEFAULT_VERSION, "2026-08-01T00:00:00Z") for index in default_indices}
         self.namespace.elasticsearch.babel = BabelReleases.from_mappings(
             DEFAULT_VERSION,
             {
                 **default_mappings,
-                "unselected-default-build": mapping(DEFAULT_VERSION),
-                OLD_INDEX: mapping(OLD_VERSION),
+                "unselected-default-build": mapping(DEFAULT_VERSION, "2026-08-09T00:00:00Z"),
+                OLD_INDEX: mapping(OLD_VERSION, "2026-09-30T12:31:00Z"),
             },
             default_index=tuple(default_indices),
         )
@@ -350,10 +405,7 @@ class TestBabelEndpoints(AsyncHTTPTestCase):
 
         assert response.code == 200
         body = json.loads(response.body)
-        assert body["babel"]["indices"] == {
-            OLD_VERSION: [OLD_INDEX],
-            DEFAULT_VERSION: default_indices,
-        }
+        assert body["babel"]["indices"] == {OLD_VERSION: [OLD_INDEX], DEFAULT_VERSION: default_indices}
         assert set(body["babel"]["indices"]) == set(body["babel"]["available_versions"])
         get_mapping.assert_awaited_once_with(index=default_indices)
 

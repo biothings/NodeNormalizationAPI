@@ -30,7 +30,7 @@
       "get": {
         "summary": "Status information on this NodeNorm instance",
         "tags": ["health"],
-        "description": "Returns service status and version information for this NodeNorm instance. The babel object contains the default release name, available release names mapped to their release URLs, selected concrete Elasticsearch indices for each available release, and optional discovery errors for ambiguous releases. Discovery runs at startup using the configured Elasticsearch client and requires no configured version list. Release targets are pinned to concrete indices until restart; moving the default alias takes effect after restart. Adding a release does not automatically change the default.",
+        "description": "Returns service status and version information for this NodeNorm instance. The babel object contains the default release name, available release names mapped to their release URLs, selected concrete Elasticsearch indices for each available release, and optional discovery errors. Discovery runs at startup using the configured Elasticsearch client and requires no configured version list. The default uses the exact concrete backing indices of its configured alias, including older builds. The default release has no separate Babel configuration override. Other supported releases select the index with the newest valid mappings._meta.build_date, compared in UTC with naive timestamps treated as UTC. Missing or malformed dates rank below valid dates; ties use the lexicographically greatest index name. Explicit selection of the default version uses the same alias targets. Release targets are pinned to concrete indices until restart; moving the default alias takes effect after restart. Adding a release does not automatically change the default.",
         "operationId": "status",
         "responses": {
           "200": {
@@ -88,7 +88,7 @@
                             "type": "string",
                             "format": "uri"
                           },
-                          "description": "Babel release names mapped to their release URLs. Releases are resolved from Elasticsearch metadata. Ambiguous releases are excluded; this map does not indicate backend health.",
+                          "description": "Babel release names mapped to their release URLs. Releases are resolved from Elasticsearch metadata. The default uses its alias targets; other releases select the newest metadata build date when duplicate builds exist. This map does not indicate backend health.",
                           "example": {
                             "2025sep1": "https://github.com/NCATSTranslator/Babel/blob/main/releases/2025sep1/README.md",
                             "2026jul22": "https://github.com/NCATSTranslator/Babel/blob/main/releases/2026jul22/README.md"
@@ -103,7 +103,7 @@
                               "type": "string"
                             }
                           },
-                          "description": "Babel release names mapped to arrays of concrete Elasticsearch index names selected for requests at startup and pinned until restart. Has the same release keys as babel.available_versions. The default release may span multiple concrete indices. Ambiguous releases are excluded; this map does not indicate backend health. Example index names are illustrative.",
+                          "description": "Babel release names mapped to arrays of concrete Elasticsearch indices selected for requests at startup and pinned until restart. Has the same release keys as babel.available_versions. The default preserves every exact alias target even if older than other builds; explicit requests for the default version use those same targets. Other releases select one index by newest valid metadata build_date, with index name descending as the final tie-break. This map does not indicate backend health. Example index names are illustrative.",
                           "example": {
                             "2025sep1": ["nodenorm_2025sep1"],
                             "2026jul22": ["nodenorm_2026jul22"]
@@ -114,9 +114,9 @@
                           "additionalProperties": {
                             "type": "string"
                           },
-                          "description": "Present when discovery finds ambiguous releases. Errors are keyed by release name. Selecting an affected release returns HTTP 503; the release is excluded from both babel.available_versions and babel.indices.",
+                          "description": "Optional discovery errors keyed by release name. Selecting an affected release returns HTTP 503; the release is excluded from both babel.available_versions and babel.indices. Duplicate builds are resolved deterministically rather than reported as errors.",
                           "example": {
-                            "2026aug1": "Multiple indices declare this Babel release"
+                            "2026aug1": "No index metadata identifies Babel release 2026aug1"
                           }
                         }
                       }
@@ -3380,7 +3380,7 @@
         "description": "Invalid request, including an unknown, removed, or malformed babel_version. Selector errors include the available release names discovered from Elasticsearch metadata."
       },
       "BabelReleaseUnavailable": {
-        "description": "Processing failed or the selected Babel release is unavailable. HTTP 503 indicates ambiguous release metadata; see babel.errors in /status. Requests never fall back to a different release."
+        "description": "Processing failed or the selected Babel release is unavailable. HTTP 503 indicates an unavailable release; see babel.errors in /status. Requests never fall back to a different release."
       }
     }
   },
