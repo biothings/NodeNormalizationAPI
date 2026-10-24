@@ -102,6 +102,7 @@ index names:
   "version": "1.1.0",
   "biolink_model_toolkit_version": "v4.4.3",
   "babel": {
+    "checked_at": "2026-10-23T12:00:00+00:00",
     "default_version": "2026jul22",
     "available_versions": {
       "2025sep1": "https://github.com/NCATSTranslator/Babel/blob/main/releases/2025sep1/README.md",
@@ -116,15 +117,16 @@ index names:
 ```
 
 Index names in this example are illustrative. Each `indices` array contains the
-concrete targets selected at startup and pinned until restart. The default release
+concrete targets selected by the latest successful discovery snapshot. The default release
 uses every backing index of its configured alias; other releases select one index.
 Available releases come from Elasticsearch metadata, rather than a configured version
 list; these maps do not indicate backend health.
 
 ### Discovering available releases
 
-At startup, the server uses its existing `ES_HOST` client to discover release indices
-from `mappings._meta.src.nodenorm` metadata on the associated cluster. No version list,
+At startup and every **10 minutes** in the background, the server uses its existing
+`ES_HOST` client to discover release indices from `mappings._meta.src.nodenorm` metadata
+on the associated cluster. No version list,
 version-to-index mapping, or per-release alias is required. The client's Elasticsearch
 permissions must allow reading mappings across that cluster. Discovery uses an explicit
 `version` field, or a dated release tag in the legacy source URL; it does not infer
@@ -145,17 +147,32 @@ release and its exact concrete backing indices. All targets must identify the sa
 Babel release. The default keeps those targets even if newer builds exist elsewhere
 on the cluster; a multi-index default queries all its backing indices. Explicitly
 requesting the default Babel version uses those same alias targets. After the alias
-moves to another release and the API restarts, the former default becomes a supported
+moves to another release and discovery refreshes, the former default becomes a supported
 nondefault release and uses the build-date rule above.
 
-The default release has no separate Babel configuration override. Configuration and
-metadata discovery are loaded at startup. Adding a release or a newer build makes
-it available after restart; adding a release does not automatically change the
-default. To change the default, move the configured alias (or change the configured
-default target) and restart.
+The default release has no separate Babel configuration override. Configuration is
+loaded at startup. Adding a release or a newer build makes it available on the next
+successful background refresh; adding a release does not automatically change the
+default. Moving the configured default alias takes effect on the next successful
+refresh, without restarting the API. Changing the configuration itself requires a restart.
 
-All selected concrete indices stay pinned until restart, so moving an alias cannot
-change queries in a running process. Keep indices serving existing processes until
-the restart rollout completes; removing an index earlier makes requests using it fail.
-Verify `/status` and sample results before rollout; discovery relies on metadata
-accurately describing each index's contents.
+Each process refreshes independently, even without incoming requests. A refresh has a
+10-second total deadline. It publishes the new release registry and default query
+indices together, so `/status` and new requests use the same snapshot. Each request
+keeps its selected concrete indices throughout processing, including conflation lookups.
+Keep previous indices available until every process has refreshed and requests using
+the previous snapshot have completed. Verify `/status` and sample results before
+removing indices; discovery relies on metadata accurately describing each index's contents.
+
+`babel.checked_at` is the UTC time of the last successful discovery. A failed refresh
+retains that snapshot and timestamp, adds `babel.refresh_error` with code
+`discovery_failed`, and retries after 30 seconds. A successful retry clears the error.
+Discovery failures alone do not determine service health.
+
+`GET /status` checks that every selected default index still exposes the expected
+Babel source version. These separate health results are cached for **5 seconds** on
+success and **1 second** on failure, with concurrent requests sharing one check and a
+3-second total deadline. Changing the default version or its concrete indices causes
+the next status request to use a new health check. A failed check returns HTTP 503;
+an expired healthy result is never served after a failed check. Health checks do not
+trigger Babel discovery. All status responses send `Cache-Control: no-store`.

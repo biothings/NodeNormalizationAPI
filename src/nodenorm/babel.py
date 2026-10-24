@@ -81,6 +81,16 @@ class BabelReleases:
         self._unavailable = dict(unavailable)
 
     @classmethod
+    def from_default_mappings(cls, default_mappings, mappings):
+        """Build one registry from a validated default target and a cluster scan."""
+        versions = {get_babel_version(mapping) for mapping in default_mappings.values()}
+        if len(versions) != 1:
+            raise ValueError("The default Elasticsearch target must contain exactly one Babel release")
+        backing_indices = tuple(default_mappings)
+        default_index = backing_indices[0] if len(backing_indices) == 1 else backing_indices
+        return cls.from_mappings(versions.pop(), {**mappings, **default_mappings}, default_index=default_index)
+
+    @classmethod
     def from_mappings(cls, default_version, mappings, default_index=None):
         """Discover release names and targets from source metadata on concrete indices."""
         validate_babel_version(default_version)

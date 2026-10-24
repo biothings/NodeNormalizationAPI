@@ -1,3 +1,4 @@
+import asyncio
 import importlib.resources
 import importlib.util
 import json
@@ -7,6 +8,8 @@ import pathlib
 import re
 import sys
 import types
+from contextlib import suppress
+from datetime import datetime, timezone
 
 import tornado.options
 
@@ -14,10 +17,13 @@ from biothings.web import connections
 from biothings.web.services.metadata import BiothingsESMetadata
 
 import nodenorm
-from nodenorm.babel import BabelReleases, get_babel_version
+from nodenorm.babel import BabelReleases
 
 
 logger = logging.getLogger(__name__)
+BABEL_REFRESH_INTERVAL = 600
+BABEL_REFRESH_RETRY_INTERVAL = 30
+BABEL_REFRESH_TIMEOUT = 10
 
 
 class NodeNormalizationAPINamespace:
@@ -83,26 +89,70 @@ class NodeNormalizationAPINamespace:
         elasticsearch_namespace.async_client = connections.es.get_async_client(
             elasticsearch_configuration["ES_HOST"], **elasticsearch_configuration["ES_ARGS"]
         )
-        # Preserve the alias's exact targets for the default release, even when
-        # the cluster contains a newer build of that Babel release.
         configured_indices = self._validate_elasticsearch_index(elasticsearch_namespace)
-        default_mappings = elasticsearch_namespace.client.indices.get_mapping(index=configured_indices)
-        versions = {get_babel_version(mapping) for mapping in default_mappings.values()}
-        if len(versions) != 1:
-            raise ValueError("The default Elasticsearch target must contain exactly one Babel release")
-        default_version = versions.pop()
-        backing_indices = tuple(default_mappings)
-        default_index = backing_indices[0] if len(backing_indices) == 1 else backing_indices
-        mappings = elasticsearch_namespace.client.indices.get_mapping(filter_path="*.mappings._meta")
-        # Preserve targets resolved above if the cluster-wide scan omits them.
-        # Prefer the scan's metadata when an index is present in both responses.
-        releases = BabelReleases.from_mappings(
-            default_version, {**default_mappings, **mappings}, default_index=default_index
+        default_mappings = elasticsearch_namespace.client.indices.get_mapping(
+            index=configured_indices, filter_path="*.mappings._meta"
         )
-        # Pin every selected concrete index until restart.
+        mappings = elasticsearch_namespace.client.indices.get_mapping(filter_path="*.mappings._meta")
+        releases = BabelReleases.from_default_mappings(default_mappings, mappings)
         elasticsearch_namespace.indices = releases.resolve().search_indices
         elasticsearch_namespace.babel = releases
+        elasticsearch_namespace.babel_checked_at = datetime.now(timezone.utc).isoformat()
+        elasticsearch_namespace.babel_refresh_error = None
         return elasticsearch_namespace
+
+    async def _discover_babel_releases(self):
+        client = self.elasticsearch.async_client
+        configuration = self.config.elasticsearch
+        index = configuration["ES_INDEX"]
+        alias = configuration["ES_ALIAS"]
+        if index and await client.indices.exists(index=index):
+            target = index
+        elif await client.indices.exists_alias(name=alias):
+            target = alias
+        else:
+            raise RuntimeError("Unable to validate nodenorm elasticsearch index / alias")
+        default_mappings = await client.indices.get_mapping(index=[target], filter_path="*.mappings._meta")
+        mappings = await client.indices.get_mapping(filter_path="*.mappings._meta")
+        return BabelReleases.from_default_mappings(default_mappings, mappings)
+
+    async def refresh_babel_releases(self):
+        """Publish a complete discovery snapshot, retaining the previous one on failure."""
+        try:
+            releases = await asyncio.wait_for(self._discover_babel_releases(), timeout=BABEL_REFRESH_TIMEOUT)
+        except Exception:
+            logger.exception("Unable to refresh Babel releases; retaining the previous snapshot")
+            self.elasticsearch.babel_refresh_error = {"code": "discovery_failed"}
+            return False
+
+        # There is no await between these writes: handlers see one complete
+        # snapshot, and requests that already selected a release keep that object.
+        self.elasticsearch.babel = releases
+        self.elasticsearch.indices = releases.resolve().search_indices
+        self.elasticsearch.babel_checked_at = datetime.now(timezone.utc).isoformat()
+        self.elasticsearch.babel_refresh_error = None
+        return True
+
+    async def _run_babel_refresh(self):
+        delay = BABEL_REFRESH_INTERVAL
+        while True:
+            await asyncio.sleep(delay)
+            refreshed = await self.refresh_babel_releases()
+            delay = BABEL_REFRESH_INTERVAL if refreshed else BABEL_REFRESH_RETRY_INTERVAL
+
+    def start_babel_refresh(self):
+        """Start one background discovery task on the server's running event loop."""
+        task = getattr(self, "_babel_refresh_task", None)
+        if task is None or task.done():
+            self._babel_refresh_task = asyncio.create_task(self._run_babel_refresh())
+
+    async def stop_babel_refresh(self):
+        task = getattr(self, "_babel_refresh_task", None)
+        if task is not None:
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
+            self._babel_refresh_task = None
 
     def _validate_elasticsearch_index(self, elasticsearch_namespace: types.SimpleNamespace) -> dict:
         """Validates the elasticsearch index / alias.

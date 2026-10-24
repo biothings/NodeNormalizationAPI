@@ -61,11 +61,15 @@ class NodeNormalizationWebServer:
             pformat(self.namespace.handlers, width=200),
         )
 
+        loop = tornado.ioloop.IOLoop.instance()
         try:
-            loop = tornado.ioloop.IOLoop.instance()
+            loop.add_callback(self.namespace.start_babel_refresh)
             loop.start()
         except Exception as gen_exc:
             logger.exception(gen_exc)
             raise gen_exc
         finally:
-            loop.close()
+            try:
+                loop.run_sync(self.namespace.stop_babel_refresh)
+            finally:
+                loop.close()

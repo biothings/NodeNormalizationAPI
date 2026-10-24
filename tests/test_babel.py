@@ -113,7 +113,9 @@ def test_legacy_configuration_resolves_configured_target_to_concrete_index(index
     assert elasticsearch.babel.available_versions == ["2025sep1", "2026jul22"]
     connections.get_client.assert_called_once_with("http://test:9200")
     connections.get_async_client.assert_called_once_with("http://test:9200")
-    assert client.indices.get_mapping.call_args_list[0].kwargs == {"index": [target]}
+    assert client.indices.get_mapping.call_args_list[0].kwargs == {
+        "index": [target], "filter_path": "*.mappings._meta"
+    }
     assert client.indices.get_mapping.call_args_list[1].kwargs == {"filter_path": "*.mappings._meta"}
     assert namespace.config.elasticsearch["ES_INDEX"] == "legacy"
     assert namespace.config.elasticsearch["ES_ALIAS"] == "alias"
@@ -139,6 +141,7 @@ def test_alias_rollover_preserves_its_exact_default_and_selects_latest_builds_fo
     def get_mapping(*, index=None, filter_path=None):
         if index is not None:
             assert index == ["alias"]
+            assert filter_path == "*.mappings._meta"
             return {alias_index: all_mappings[alias_index]}
         assert filter_path == "*.mappings._meta"
         return all_mappings
@@ -216,7 +219,9 @@ def test_multi_index_alias_preserves_all_default_backing_indices_despite_newer_b
     assert elasticsearch.babel.resolve("2025sep1").search_indices == ["old-a", "old-b"]
     assert elasticsearch.babel.resolve("2026jul22").index == "new-release-build"
     assert elasticsearch.babel.errors == {}
-    assert client.indices.get_mapping.call_args_list[0].kwargs == {"index": ["alias"]}
+    assert client.indices.get_mapping.call_args_list[0].kwargs == {
+        "index": ["alias"], "filter_path": "*.mappings._meta"
+    }
     assert client.indices.get_mapping.call_args_list[1].kwargs == {"filter_path": "*.mappings._meta"}
 
 
