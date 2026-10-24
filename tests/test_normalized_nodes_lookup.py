@@ -538,7 +538,7 @@ class TestBabelNormalizationHTTP(AsyncHTTPTestCase):
         self.assert_release_response(response, "2026jul22", "NEW", conflated=True)
         assert [call["index"] for call in self.elasticsearch.calls] == [["nodenorm-new"], ["nodenorm-new"]]
 
-    def test_moving_default_alias_cannot_change_pinned_release_results(self):
+    def test_moving_default_alias_cannot_change_release_results_between_refreshes(self):
         def mapping(version):
             return {"mappings": {"_meta": {"src": {"nodenorm": {"version": version}}}}}
 

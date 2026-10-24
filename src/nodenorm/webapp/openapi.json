@@ -30,11 +30,16 @@
       "get": {
         "summary": "Status information on this NodeNorm instance",
         "tags": ["health"],
-        "description": "Returns service status and version information for this NodeNorm instance. The babel object contains the default release name, available release names mapped to their release URLs, selected concrete Elasticsearch indices for each available release, and optional discovery errors. Discovery runs at startup using the configured Elasticsearch client and requires no configured version list. The default uses the exact concrete backing indices of its configured alias, including older builds. The default release has no separate Babel configuration override. Other supported releases select the index with the newest valid mappings._meta.build_date, compared in UTC with naive timestamps treated as UTC. Missing or malformed dates rank below valid dates; ties use the lexicographically greatest index name. Explicit selection of the default version uses the same alias targets. Release targets are pinned to concrete indices until restart; moving the default alias takes effect after restart. Adding a release does not automatically change the default.",
+        "description": "Returns service status and version information for this NodeNorm instance. Babel discovery runs at startup and every 600 seconds in the background, independently of incoming requests. It uses the configured Elasticsearch client and requires no configured version list. Successful discovery publishes the release registry and query indices together. Moving the configured default alias takes effect on the next successful refresh without restarting; each in-flight request keeps its selected concrete indices. The default uses every exact concrete backing index of its configured alias, including older builds, and has no separate Babel configuration override. Explicit selection of the default version uses those same targets. Other releases select the newest valid mappings._meta.build_date, compared in UTC with naive timestamps treated as UTC; missing or malformed dates rank below valid dates and ties use index name descending. Adding a release does not automatically change the default. Discovery has a 10-second total deadline; failure retains the previous snapshot and checked_at timestamp, exposes refresh_error, and retries after 30 seconds. Separate health checks validate the expected Babel source version on every default index, with a 3-second deadline, a 5-second success cache and a 1-second failure cache. Concurrent status requests share a health check. A changed default version or indices triggers a new check. Health failure returns HTTP 503. All status responses send Cache-Control: no-store.",
         "operationId": "status",
         "responses": {
           "200": {
             "description": "Successful Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {"type": "string", "const": "no-store"}
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -74,7 +79,8 @@
                       "required": [
                         "default_version",
                         "available_versions",
-                        "indices"
+                        "indices",
+                        "checked_at"
                       ],
                       "properties": {
                         "default_version": {
@@ -103,11 +109,25 @@
                               "type": "string"
                             }
                           },
-                          "description": "Babel release names mapped to arrays of concrete Elasticsearch indices selected for requests at startup and pinned until restart. Has the same release keys as babel.available_versions. The default preserves every exact alias target even if older than other builds; explicit requests for the default version use those same targets. Other releases select one index by newest valid metadata build_date, with index name descending as the final tie-break. This map does not indicate backend health. Example index names are illustrative.",
+                          "description": "Babel release names mapped to arrays of concrete Elasticsearch indices selected by the latest successful discovery snapshot, refreshed every 600 seconds in the background. Has the same release keys as babel.available_versions. The default preserves every exact alias target even if older than other builds; explicit requests for the default version use those same targets. Other releases select one index by newest valid metadata build_date, with index name descending as the final tie-break. Requests keep their selected targets throughout processing. This map does not indicate backend health. Example index names are illustrative.",
                           "example": {
                             "2025sep1": ["nodenorm_2025sep1"],
                             "2026jul22": ["nodenorm_2026jul22"]
                           }
+                        },
+                        "checked_at": {
+                          "type": "string",
+                          "format": "date-time",
+                          "description": "UTC time of the last successful Babel discovery. Retained when a refresh fails; separate health checks do not change it.",
+                          "example": "2026-10-23T12:00:00+00:00"
+                        },
+                        "refresh_error": {
+                          "type": "object",
+                          "required": ["code"],
+                          "properties": {
+                            "code": {"type": "string", "const": "discovery_failed"}
+                          },
+                          "description": "Present after a failed background discovery. The last valid registry remains active and discovery retries after 30 seconds. Cleared by a successful refresh. Contains no upstream connection details."
                         },
                         "errors": {
                           "type": "object",
@@ -123,6 +143,14 @@
                     }
                   }
                 }
+              }
+            }
+          },
+          "503": {
+            "description": "The default Elasticsearch health check failed or exceeded its 3-second deadline. Failed checks are cached for 1 second; an expired success is not served after failure.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {"type": "string", "const": "no-store"}
               }
             }
           }

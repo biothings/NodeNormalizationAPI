@@ -1,16 +1,18 @@
 """Offline endpoint coverage for request-scoped Babel release selection."""
 
+import asyncio
 import importlib.util
 import json
 import sys
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
-from tornado.testing import AsyncHTTPTestCase
+from tornado.testing import AsyncHTTPTestCase, gen_test
 from tornado.web import Application
 
 from nodenorm.babel import BabelReleases
+from nodenorm.namespace import NodeNormalizationAPINamespace
 
 
 DEFAULT_VERSION = "2026jul22"
@@ -122,6 +124,8 @@ class TestBabelEndpoints(AsyncHTTPTestCase):
                 async_client=self.client,
                 indices=[DEFAULT_INDEX],
                 babel=BabelReleases(DEFAULT_VERSION, {OLD_VERSION: OLD_INDEX, DEFAULT_VERSION: DEFAULT_INDEX}),
+                babel_checked_at="2026-10-23T12:00:00+00:00",
+                babel_refresh_error=None,
             )
         )
         app = Application(
@@ -297,6 +301,7 @@ class TestBabelEndpoints(AsyncHTTPTestCase):
                 DEFAULT_VERSION: f"https://github.com/NCATSTranslator/Babel/blob/main/releases/{DEFAULT_VERSION}/README.md",
             },
             "indices": {OLD_VERSION: [OLD_INDEX], DEFAULT_VERSION: [DEFAULT_INDEX]},
+            "checked_at": "2026-10-23T12:00:00+00:00",
         }
         assert set(body) == {"status", "deployment_environment", "version", "biolink_model_toolkit_version", "babel"}
         assert body["deployment_environment"] == "unknown"
@@ -304,7 +309,9 @@ class TestBabelEndpoints(AsyncHTTPTestCase):
         assert body["version"] == handlers.status.get_openapi_version()
         assert body["biolink_model_toolkit_version"] == "test"
         assert "elasticsearch" not in body
-        assert self.client.calls == [("get_mapping", {"index": [DEFAULT_INDEX]})]
+        assert self.client.calls == [
+            ("get_mapping", {"index": [DEFAULT_INDEX], "filter_path": "*.mappings._meta.src.nodenorm"})
+        ]
 
         selected = self.assert_selected_release(
             self.fetch(f"/get_setid?curie=INPUT:1&babel_version={OLD_VERSION}"), OLD_VERSION
@@ -334,7 +341,9 @@ class TestBabelEndpoints(AsyncHTTPTestCase):
         assert set(body["babel"]["available_versions"]) == {OLD_VERSION, DEFAULT_VERSION}
         assert body["babel"]["indices"] == {OLD_VERSION: [OLD_INDEX], DEFAULT_VERSION: [DEFAULT_INDEX]}
         assert "errors" not in body["babel"]
-        assert self.client.calls == [("get_mapping", {"index": [DEFAULT_INDEX]})]
+        assert self.client.calls == [
+            ("get_mapping", {"index": [DEFAULT_INDEX], "filter_path": "*.mappings._meta.src.nodenorm"})
+        ]
 
         self.client.calls.clear()
         selected = self.assert_selected_release(
@@ -407,7 +416,7 @@ class TestBabelEndpoints(AsyncHTTPTestCase):
         body = json.loads(response.body)
         assert body["babel"]["indices"] == {OLD_VERSION: [OLD_INDEX], DEFAULT_VERSION: default_indices}
         assert set(body["babel"]["indices"]) == set(body["babel"]["available_versions"])
-        get_mapping.assert_awaited_once_with(index=default_indices)
+        get_mapping.assert_awaited_once_with(index=default_indices, filter_path="*.mappings._meta.src.nodenorm")
 
     def test_status_does_not_depend_on_cluster_node_access(self):
         self.client.cat_error = True
@@ -424,7 +433,93 @@ class TestBabelEndpoints(AsyncHTTPTestCase):
         assert "elasticsearch" not in body
         assert body["version"] == handlers.status.get_openapi_version()
         assert body["biolink_model_toolkit_version"] == "test"
-        assert self.client.calls == [("get_mapping", {"index": [DEFAULT_INDEX]})]
+        assert self.client.calls == [
+            ("get_mapping", {"index": [DEFAULT_INDEX], "filter_path": "*.mappings._meta.src.nodenorm"})
+        ]
+
+    def test_status_reuses_health_check_and_keeps_request_headers_separate(self):
+        first = self.fetch("/status")
+        second = self.fetch("/status", headers={"Origin": "https://example.org"})
+
+        assert first.code == second.code == 200
+        assert len(self.client.calls) == 1
+        assert first.headers["Cache-Control"] == second.headers["Cache-Control"] == "no-store"
+        assert "Access-Control-Allow-Origin" not in first.headers
+        assert second.headers["Access-Control-Allow-Origin"] == "*"
+
+    def test_status_exposes_retained_snapshot_after_discovery_failure(self):
+        self.namespace.elasticsearch.babel_checked_at = "2026-10-23T12:00:00+00:00"
+        self.namespace.elasticsearch.babel_refresh_error = {"code": "discovery_failed"}
+
+        response = self.fetch("/status")
+
+        assert response.code == 200
+        babel = json.loads(response.body)["babel"]
+        assert babel["checked_at"] == "2026-10-23T12:00:00+00:00"
+        assert babel["refresh_error"] == {"code": "discovery_failed"}
+        assert babel["default_version"] == DEFAULT_VERSION
+
+    def test_status_does_not_cache_success_for_the_ten_minute_discovery_interval(self):
+        with patch("nodenorm.status_health.monotonic", return_value=0):
+            assert self.fetch("/status").code == 200
+        self.client.failed_index = DEFAULT_INDEX
+        with patch("nodenorm.status_health.monotonic", return_value=5):
+            failed = self.fetch("/status")
+            assert failed.code == 503
+            assert failed.headers["Cache-Control"] == "no-store"
+            assert self.fetch("/status").code == 503
+        assert len(self.client.calls) == 2
+        self.client.failed_index = None
+        with patch("nodenorm.status_health.monotonic", return_value=6):
+            assert self.fetch("/status").code == 200
+
+    @gen_test
+    async def test_background_discovery_switches_status_and_routing_without_changing_inflight_request(self):
+        await self.http_client.fetch(self.get_url("/status"))
+        started = asyncio.Event()
+        release_request = asyncio.Event()
+        original_msearch = self.client.msearch
+
+        async def delayed_msearch(**kwargs):
+            started.set()
+            await release_request.wait()
+            return await original_msearch(**kwargs)
+
+        self.client.msearch = delayed_msearch
+        inflight = self.http_client.fetch(self.get_url("/get_setid?curie=INPUT:1"))
+        await started.wait()
+        old_snapshot = self.namespace.elasticsearch.babel
+        self.namespace.config.elasticsearch = {"ES_INDEX": "", "ES_ALIAS": "alias"}
+        self.client.indices.exists_alias = AsyncMock(return_value=True)
+        mappings = {
+            DEFAULT_INDEX: {"mappings": {"_meta": {"src": {"nodenorm": {"version": DEFAULT_VERSION}}}}},
+            OLD_INDEX: {"mappings": {"_meta": {"src": {"nodenorm": {"version": OLD_VERSION}}}}},
+        }
+
+        async def get_mapping(*, index=None, **kwargs):
+            if index == ["alias"]:
+                return {OLD_INDEX: mappings[OLD_INDEX]}
+            return mappings if index is None else {name: mappings[name] for name in index}
+
+        self.client.indices.get_mapping = AsyncMock(side_effect=get_mapping)
+        namespace = NodeNormalizationAPINamespace.__new__(NodeNormalizationAPINamespace)
+        namespace.config = self.namespace.config
+        namespace.elasticsearch = self.namespace.elasticsearch
+        assert await namespace.refresh_babel_releases()
+        assert old_snapshot.default_version == DEFAULT_VERSION
+        release_request.set()
+        previous = await inflight
+        assert self.assert_selected_release(previous, DEFAULT_VERSION)["normalized_curies"] == ["NEW:1"]
+        self.client.msearch = original_msearch
+
+        current = await self.http_client.fetch(self.get_url("/get_setid?curie=INPUT:1"))
+        assert self.assert_selected_release(current, OLD_VERSION)["normalized_curies"] == ["OLD:1"]
+        status = await self.http_client.fetch(self.get_url("/status"))
+        babel = json.loads(status.body)["babel"]
+        assert babel["default_version"] == OLD_VERSION
+        assert babel["indices"][OLD_VERSION] == self.namespace.elasticsearch.indices == [OLD_INDEX]
+        assert babel["checked_at"] == self.namespace.elasticsearch.babel_checked_at
+        assert self.client.indices.get_mapping.await_args.kwargs["index"] == [OLD_INDEX]
 
     def test_status_reports_configured_environment_independently_of_request_host(self):
         for environment in ("CI", "Prod", "Test", "unknown"):

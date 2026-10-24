@@ -2,12 +2,13 @@ import importlib.resources
 import json
 from functools import lru_cache
 
-from elasticsearch import AsyncElasticsearch
+from tornado.web import HTTPError
 
 import nodenorm
-from nodenorm.babel import get_babel_release_url, get_babel_version
+from nodenorm.babel import get_babel_release_url
 from nodenorm.biolink import BIOLINK_MODEL_VERSION
 from nodenorm.handlers.base import NodeNormalizationBaseHandler
+from nodenorm.status_health import StatusHealthCache
 
 
 @lru_cache(maxsize=None)
@@ -23,23 +24,32 @@ class NodeNormHealthHandler(NodeNormalizationBaseHandler):
 
     name = "health"
 
+    def set_default_headers(self):
+        super().set_default_headers()
+        self.set_header("Cache-Control", "no-store")
+
     async def get(self):
-        async_client: AsyncElasticsearch = self.biothings.elasticsearch.async_client
-        search_indices = self.biothings.elasticsearch.indices
-
-        mapping_response = await async_client.indices.get_mapping(index=search_indices)
-        index_mapping = next(iter(mapping_response.values()))
-        # Validate live default metadata while reporting the releases resolved at startup.
-        get_babel_version(index_mapping)
-
-        releases = self.biothings.elasticsearch.babel
+        elasticsearch = self.biothings.elasticsearch
+        releases = elasticsearch.babel
         babel_status = {
             "default_version": releases.default_version,
             "available_versions": {version: get_babel_release_url(version) for version in releases.available_versions},
             "indices": {version: releases.resolve(version).search_indices for version in releases.available_versions},
+            "checked_at": elasticsearch.babel_checked_at,
         }
         if releases.errors:
             babel_status["errors"] = releases.errors
+        refresh_error = elasticsearch.babel_refresh_error
+        if refresh_error is not None:
+            babel_status["refresh_error"] = refresh_error
+
+        release = releases.resolve()
+        health = getattr(elasticsearch, "status_health_cache", None)
+        if health is None or health.configuration != (release.version, tuple(release.search_indices)):
+            health = StatusHealthCache(elasticsearch.async_client, release)
+            elasticsearch.status_health_cache = health
+        if not await health.check():
+            raise HTTPError(503, reason="Elasticsearch health check failed")
 
         status_response = {
             "status": "running",
