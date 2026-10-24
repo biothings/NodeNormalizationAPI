@@ -2,6 +2,7 @@ import importlib.resources
 import importlib.util
 import json
 import logging
+import os
 import pathlib
 import re
 import sys
@@ -13,6 +14,7 @@ from biothings.web import connections
 from biothings.web.services.metadata import BiothingsESMetadata
 
 import nodenorm
+from nodenorm.babel import BabelReleases, get_babel_version
 
 
 logger = logging.getLogger(__name__)
@@ -67,6 +69,13 @@ class NodeNormalizationAPINamespace:
         """
         elasticsearch_namespace = types.SimpleNamespace()
         elasticsearch_configuration = self.config.elasticsearch
+        babel_configuration = getattr(self.config, "babel", {})
+        if not isinstance(babel_configuration, dict):
+            raise ValueError("babel configuration must be an object")
+        if babel_configuration:
+            raise ValueError(
+                "Babel releases are discovered from Elasticsearch; configure the default with ES_INDEX / ES_ALIAS"
+            )
 
         elasticsearch_namespace.client = connections.es.get_client(
             elasticsearch_configuration["ES_HOST"], **elasticsearch_configuration["ES_ARGS"]
@@ -74,7 +83,25 @@ class NodeNormalizationAPINamespace:
         elasticsearch_namespace.async_client = connections.es.get_async_client(
             elasticsearch_configuration["ES_HOST"], **elasticsearch_configuration["ES_ARGS"]
         )
-        elasticsearch_namespace.indices = self._validate_elasticsearch_index(elasticsearch_namespace)
+        # Preserve the alias's exact targets for the default release, even when
+        # the cluster contains a newer build of that Babel release.
+        configured_indices = self._validate_elasticsearch_index(elasticsearch_namespace)
+        default_mappings = elasticsearch_namespace.client.indices.get_mapping(index=configured_indices)
+        versions = {get_babel_version(mapping) for mapping in default_mappings.values()}
+        if len(versions) != 1:
+            raise ValueError("The default Elasticsearch target must contain exactly one Babel release")
+        default_version = versions.pop()
+        backing_indices = tuple(default_mappings)
+        default_index = backing_indices[0] if len(backing_indices) == 1 else backing_indices
+        mappings = elasticsearch_namespace.client.indices.get_mapping(filter_path="*.mappings._meta")
+        # Preserve targets resolved above if the cluster-wide scan omits them.
+        # Prefer the scan's metadata when an index is present in both responses.
+        releases = BabelReleases.from_mappings(
+            default_version, {**default_mappings, **mappings}, default_index=default_index
+        )
+        # Pin every selected concrete index until restart.
+        elasticsearch_namespace.indices = releases.resolve().search_indices
+        elasticsearch_namespace.babel = releases
         return elasticsearch_namespace
 
     def _validate_elasticsearch_index(self, elasticsearch_namespace: types.SimpleNamespace) -> dict:
@@ -196,9 +223,8 @@ class NodeNormalizationAPINamespace:
         Loads the default configuration file found in ~/src/nodenorm/config/config.default.json
         to create a base structure. It then checks if an optional configuration file was provided
         via the command line options. We override the default configuration file with this option
-        based file. After that, we setup our static path structure for loading the webapp containing
-        our swaggerui frontend. We check any other command line options and then return our
-        configuration data structure
+        based file. We check any other command line options and then return our configuration
+        data structure. Static frontend routes are defined explicitly by build_handlers.
         """
         configuration = {}
 
@@ -217,11 +243,10 @@ class NodeNormalizationAPINamespace:
                 with open(optional_configuration, "r", encoding="utf-8") as handle:
                     configuration.update(json.load(handle))
 
-        # Force the static path to the webapp directory
-        package_directory = importlib.resources.files(nodenorm)
-        webapp_directory = package_directory.joinpath("webapp")
-        configuration["webserver"]["SETTINGS"]["static_path"] = str(webapp_directory)
-        configuration["webserver"]["SETTINGS"]["static_url_prefix"] = "/"
+        deployment_environment = os.getenv("NODENORM_DEPLOYMENT_ENV") or configuration["deployment_environment"]
+        if not isinstance(deployment_environment, str):
+            raise ValueError("deployment_environment must be a string")
+        configuration["deployment_environment"] = deployment_environment.strip() or "unknown"
 
         configuration_namespace = types.SimpleNamespace(**configuration)
 

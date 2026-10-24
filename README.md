@@ -28,3 +28,134 @@ https://github.com/biothings/biothings_explorer/blob/main/docs/README-maintainin
 The documentation is maintained at the [biothings_explorer](https://github.com/biothings/biothings_explorer) repository,
 as each knowledgebase API will be integrated into the [BioThings Explorer application](https://explorer.biothings.io) become
 a Translator's standard KP (Knowledge Provider) API.
+
+## Running Node Normalization locally
+
+With the project installed in `.venv`, start the server from the repository root:
+
+```bash
+NODENORM_DEPLOYMENT_ENV=local .venv/bin/python -m nodenorm --host=127.0.0.1 --port=8000
+```
+
+This explicitly reports `"deployment_environment": "local"` in `GET /status`.
+
+The default configuration connects to Elasticsearch at `http://localhost:9200` using
+the `annotator-nodenorm` index or alias. Add `--conf=/path/to/config.local.json` for
+local overrides such as connection headers.
+
+Local defaults enable `webserver.SETTINGS.debug` and `webserver.SETTINGS.autoreload`.
+Changes to imported Python files automatically restart the server. JSON configuration
+and OpenAPI version changes require a manual restart. The Docker configuration disables
+debug mode and autoreload.
+
+## Reporting the deployment environment
+
+`GET /status` reports `deployment_environment` from explicit deployment configuration.
+Set `NODENORM_DEPLOYMENT_ENV` to the environment name: `CI`, `Prod`, `Test`, or `local`.
+Use `NODENORM_DEPLOYMENT_ENV=local` when running locally to override the `unknown`
+fallback. You can also set `"deployment_environment": "local"` at the top level of
+the JSON file passed through `--conf`. A nonempty environment variable takes precedence.
+The value is loaded at startup and defaults to `unknown` when unset; request headers,
+hostnames, and test-runner settings do not determine it.
+
+Kubernetes deployments pass the pod's `gov.nih.ncats.appenv` label into
+`NODENORM_DEPLOYMENT_ENV` through the Downward API. Set that label in the environment's
+Helm values under `ncats.labels`. DevOps supplies `CI`, `Prod`, or `Test`, and the API
+preserves that capitalization. The chart defaults to `unknown`. Restart the service
+after changing the environment configuration.
+
+## Selecting a Babel release in Node Normalization
+
+Starting with API version 1.1.0, clients can select an available Babel release for each
+request. Omitting `babel_version` uses the configured default release.
+
+- `GET /get_normalized_nodes`, `GET /get_semantic_types`, and both `GET` and `POST /get_setid`
+  accept the optional `babel_version` query parameter.
+- `POST /get_normalized_nodes` accepts an optional `babel_version` string in its JSON body.
+- `POST /get_setid` keeps its existing array body; its query parameter selects one release
+  for the entire batch.
+
+For example, select `2025sep1` with
+`GET /get_normalized_nodes?curie=MESH:D014867&babel_version=2025sep1`, or send:
+
+```json
+{
+  "curies": ["MESH:D014867"],
+  "babel_version": "2025sep1"
+}
+```
+
+Successful data responses include `X-Babel-Version`, which is also exposed to browser
+clients through CORS. Unknown, removed, or malformed selectors return HTTP 400 with the
+available release names. An unavailable backend returns an error. Requests never
+fall back to another release.
+
+`GET /status` groups release information under `babel`. Its `default_version` field names
+the default release, `available_versions` maps each available release to its release URL,
+and `indices` maps the same release names to arrays of selected concrete Elasticsearch
+index names:
+
+```json
+{
+  "status": "running",
+  "deployment_environment": "CI",
+  "version": "1.1.0",
+  "biolink_model_toolkit_version": "v4.4.3",
+  "babel": {
+    "default_version": "2026jul22",
+    "available_versions": {
+      "2025sep1": "https://github.com/NCATSTranslator/Babel/blob/main/releases/2025sep1/README.md",
+      "2026jul22": "https://github.com/NCATSTranslator/Babel/blob/main/releases/2026jul22/README.md"
+    },
+    "indices": {
+      "2025sep1": ["nodenorm_2025sep1"],
+      "2026jul22": ["nodenorm_2026jul22"]
+    }
+  }
+}
+```
+
+Index names in this example are illustrative. Each `indices` array contains the
+concrete targets selected at startup and pinned until restart. The default release
+uses every backing index of its configured alias; other releases select one index.
+Available releases come from Elasticsearch metadata, rather than a configured version
+list; these maps do not indicate backend health.
+
+### Discovering available releases
+
+At startup, the server uses its existing `ES_HOST` client to discover release indices
+from `mappings._meta.src.nodenorm` metadata on the associated cluster. No version list,
+version-to-index mapping, or per-release alias is required. The client's Elasticsearch
+permissions must allow reading mappings across that cluster. Discovery uses an explicit
+`version` field, or a dated release tag in the legacy source URL; it does not infer
+versions from index names. Unrelated indices and invalid release metadata are ignored.
+
+For supported releases outside the default alias, group indices by their Babel
+release metadata and choose one build using this rule:
+
+1. Prefer the newest valid ISO build date in `mappings._meta.build_date`. Compare dates
+   in UTC; timestamps without a timezone are treated as UTC. A valid date ranks above
+   missing or malformed dates.
+2. If build dates are equal, or all candidates lack valid dates, choose the
+   lexicographically greatest concrete index name. This fallback provides a stable
+   ordering; it does not establish the age or release of an index.
+
+The default is different: `ES_INDEX` / `ES_ALIAS` is authoritative for both its
+release and its exact concrete backing indices. All targets must identify the same
+Babel release. The default keeps those targets even if newer builds exist elsewhere
+on the cluster; a multi-index default queries all its backing indices. Explicitly
+requesting the default Babel version uses those same alias targets. After the alias
+moves to another release and the API restarts, the former default becomes a supported
+nondefault release and uses the build-date rule above.
+
+The default release has no separate Babel configuration override. Configuration and
+metadata discovery are loaded at startup. Adding a release or a newer build makes
+it available after restart; adding a release does not automatically change the
+default. To change the default, move the configured alias (or change the configured
+default target) and restart.
+
+All selected concrete indices stay pinned until restart, so moving an alias cannot
+change queries in a running process. Keep indices serving existing processes until
+the restart rollout completes; removing an index earlier makes requests using it fail.
+Verify `/status` and sample results before rollout; discovery relies on metadata
+accurately describing each index's contents.

@@ -4,8 +4,8 @@
         "PORT": 8000,
         "ENABLE_CURL_CLIENT": true,
         "SETTINGS": {
-            "debug": true,
-            "autoreload": true
+            "debug": false,
+            "autoreload": false
         }
     },
     "api": {

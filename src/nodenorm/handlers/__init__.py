@@ -9,7 +9,7 @@ import nodenorm
 def build_handlers() -> dict[str, tuple[str, Callable]]:
     """Generate our handler mapping for the nodenorm API."""
     from nodenorm.handlers.conflations import ValidConflationsHandler
-    from nodenorm.handlers.health import NodeNormHealthHandler
+    from nodenorm.handlers.status import NodeNormHealthHandler
     from nodenorm.handlers.normalized_nodes import NormalizedNodesHandler
     from nodenorm.handlers.semantic_types import SemanticTypeHandler
     from nodenorm.handlers.set_identifiers import SetIdentifierHandler
