@@ -303,9 +303,20 @@ class TestBabelEndpoints(AsyncHTTPTestCase):
             "indices": {OLD_VERSION: [OLD_INDEX], DEFAULT_VERSION: [DEFAULT_INDEX]},
             "checked_at": "2026-10-23T12:00:00+00:00",
         }
-        assert set(body) == {"status", "deployment_environment", "version", "biolink_model_toolkit_version", "babel"}
+        assert set(body) == {
+            "status",
+            "deployment_environment",
+            "version",
+            "babel_version",
+            "babel_version_url",
+            "backend",
+            "biolink_model_toolkit_version",
+            "babel",
+        }
         assert body["deployment_environment"] == "unknown"
-        assert "backend" not in body
+        assert body["babel_version"] == body["babel"]["default_version"] == DEFAULT_VERSION
+        assert body["babel_version_url"] == body["babel"]["available_versions"][DEFAULT_VERSION]
+        assert body["backend"] == "elasticsearch"
         assert body["version"] == handlers.status.get_openapi_version()
         assert body["biolink_model_toolkit_version"] == "test"
         assert "elasticsearch" not in body
@@ -429,7 +440,7 @@ class TestBabelEndpoints(AsyncHTTPTestCase):
         assert body["babel"]["default_version"] == DEFAULT_VERSION
         assert set(body["babel"]["available_versions"]) == {OLD_VERSION, DEFAULT_VERSION}
         assert "errors" not in body["babel"]
-        assert "backend" not in body
+        assert body["backend"] == "elasticsearch"
         assert "elasticsearch" not in body
         assert body["version"] == handlers.status.get_openapi_version()
         assert body["biolink_model_toolkit_version"] == "test"
@@ -515,8 +526,12 @@ class TestBabelEndpoints(AsyncHTTPTestCase):
         current = await self.http_client.fetch(self.get_url("/get_setid?curie=INPUT:1"))
         assert self.assert_selected_release(current, OLD_VERSION)["normalized_curies"] == ["OLD:1"]
         status = await self.http_client.fetch(self.get_url("/status"))
-        babel = json.loads(status.body)["babel"]
+        body = json.loads(status.body)
+        babel = body["babel"]
         assert babel["default_version"] == OLD_VERSION
+        assert body["babel_version"] == OLD_VERSION
+        assert body["babel_version_url"] == babel["available_versions"][OLD_VERSION]
+        assert body["backend"] == "elasticsearch"
         assert babel["indices"][OLD_VERSION] == self.namespace.elasticsearch.indices == [OLD_INDEX]
         assert babel["checked_at"] == self.namespace.elasticsearch.babel_checked_at
         assert self.client.indices.get_mapping.await_args.kwargs["index"] == [OLD_INDEX]

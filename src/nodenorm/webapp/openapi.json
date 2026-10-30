@@ -49,6 +49,9 @@
                     "status",
                     "deployment_environment",
                     "version",
+                    "babel_version",
+                    "babel_version_url",
+                    "backend",
                     "biolink_model_toolkit_version",
                     "babel"
                   ],
@@ -68,6 +71,22 @@
                       "type": "string",
                       "description": "Node Normalization API version.",
                       "example": "1.1.0"
+                    },
+                    "babel_version": {
+                      "type": "string",
+                      "description": "Temporary compatibility field for existing clients. Always equals babel.default_version; new clients should use the babel object for multi-release metadata.",
+                      "example": "2026jul22"
+                    },
+                    "babel_version_url": {
+                      "type": "string",
+                      "format": "uri",
+                      "description": "Temporary compatibility field for existing clients. Always equals babel.available_versions[babel.default_version], the default release URL.",
+                      "example": "https://github.com/NCATSTranslator/Babel/blob/main/releases/2026jul22/README.md"
+                    },
+                    "backend": {
+                      "type": "string",
+                      "const": "elasticsearch",
+                      "description": "Backend identifier retained for compatibility with existing clients' API version tracking. Does not select a Babel release."
                     },
                     "biolink_model_toolkit_version": {
                       "type": "string",

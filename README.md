@@ -100,6 +100,9 @@ index names:
   "status": "running",
   "deployment_environment": "CI",
   "version": "1.1.0",
+  "babel_version": "2026jul22",
+  "babel_version_url": "https://github.com/NCATSTranslator/Babel/blob/main/releases/2026jul22/README.md",
+  "backend": "elasticsearch",
   "biolink_model_toolkit_version": "v4.4.3",
   "babel": {
     "checked_at": "2026-10-23T12:00:00+00:00",
@@ -115,6 +118,13 @@ index names:
   }
 }
 ```
+
+The top-level `babel_version`, `babel_version_url`, and `backend` fields are restored
+as a temporary compatibility remedy for existing clients such as ORION.
+`babel_version` always equals `babel.default_version`, and `babel_version_url` equals
+`babel.available_versions[babel.default_version]`; both follow default-release refreshes.
+`backend` is always `"elasticsearch"`. New clients should use the `babel` object for
+multi-release metadata and explicitly select a release on normalization requests when needed.
 
 Index names in this example are illustrative. Each `indices` array contains the
 concrete targets selected by the latest successful discovery snapshot. The default release
