@@ -55,6 +55,10 @@ class NodeNormHealthHandler(NodeNormalizationBaseHandler):
             "status": "running",
             "deployment_environment": self.biothings.config.deployment_environment,
             "version": get_openapi_version(),
+            # Temporary compatibility with clients using the pre-multi-Babel status shape.
+            "babel_version": release.version,
+            "babel_version_url": get_babel_release_url(release.version),
+            "backend": "elasticsearch",
             "biolink_model_toolkit_version": BIOLINK_MODEL_VERSION,
             "babel": babel_status,
         }
