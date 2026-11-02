@@ -223,8 +223,8 @@ class TestBabelEndpoints(AsyncHTTPTestCase):
         )
         default = self.assert_selected_release(self.fetch("/get_semantic_types"), DEFAULT_VERSION)
 
-        assert set(old["semantic_types"]["types"]) == {"biolink:Disease", "biolink:disease"}
-        assert set(default["semantic_types"]["types"]) == {"biolink:Gene", "biolink:gene"}
+        assert set(old["semantic_types"]["types"]) == {"biolink:Disease"}
+        assert set(default["semantic_types"]["types"]) == {"biolink:Gene"}
         assert [call[1]["index"] for call in self.client.calls] == [[OLD_INDEX], [DEFAULT_INDEX]]
 
     def test_semantic_types_reject_unsupported_release_before_lookup(self):
@@ -366,7 +366,7 @@ class TestBabelEndpoints(AsyncHTTPTestCase):
         default = self.assert_selected_release(self.fetch("/get_setid?curie=INPUT:1"), DEFAULT_VERSION)
 
         assert selected["normalized_curies"] == ["OLD:1"]
-        assert set(semantic_types["semantic_types"]["types"]) == {"biolink:Disease", "biolink:disease"}
+        assert set(semantic_types["semantic_types"]["types"]) == {"biolink:Disease"}
         assert default["normalized_curies"] == ["NEW:1"]
         assert [(operation, kwargs["index"]) for operation, kwargs in self.client.calls] == [
             ("msearch", [OLD_INDEX]),

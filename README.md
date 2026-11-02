@@ -99,7 +99,7 @@ index names:
 {
   "status": "running",
   "deployment_environment": "CI",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "babel_version": "2026jul22",
   "babel_version_url": "https://github.com/NCATSTranslator/Babel/blob/main/releases/2026jul22/README.md",
   "backend": "elasticsearch",
@@ -186,3 +186,18 @@ success and **1 second** on failure, with concurrent requests sharing one check 
 the next status request to use a new health check. A failed check returns HTTP 503;
 an expired healthy result is never served after a failed check. Health checks do not
 trigger Babel discovery. All status responses send `Cache-Control: no-store`.
+
+## OpenAPI document
+
+API version 1.2.0 corrects conflation and semantic-type responses and rejects invalid boolean
+flags. It retains the multi-Babel selectors, response headers and status health checks added in 1.1.0.
+
+The API is described by `src/nodenorm/webapp/openapi.json`, which is written by hand and served
+verbatim at `/webapp/openapi.json` (with `/openapi.json` redirecting there); the Swagger UI at `/`
+renders it. `/status` reports its `info.version` as the API version, so bump that when the API
+changes. `tests/test_openapi.py` checks that the document validates and that its paths, methods,
+query parameters, POST body fields and the `SetIDResponse` schema match the handlers, so a handler
+change that isn't reflected in the JSON fails the test suite. The parameter and body checks find
+what each HTTP method reads by inspecting literal argument names in Tornado `get_argument(s)` and
+`get_query_argument(s)` calls, and literal body fields read with `.get("…")`. They follow handler
+helper methods and resolve local parameter references. Dynamic names still need explicit coverage.

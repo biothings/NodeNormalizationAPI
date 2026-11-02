@@ -48,7 +48,7 @@ def test_default_configuration_starts_autoreload():
     assert app.settings["debug"] is True
     assert app.settings["autoreload"] is True
     start.assert_called_once_with()
-    assert "/status?" in app.biothings.handlers
+    assert "/status" in app.biothings.handlers
 
 
 @pytest.mark.parametrize("environment", [None, ""])
