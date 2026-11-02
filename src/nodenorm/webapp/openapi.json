@@ -602,7 +602,7 @@
           "identifier": {"type": "string"},
           "label": {"type": "string"},
           "description": {"type": "string", "description": "Only when `description` was requested"},
-          "type": {"type": "string", "description": "Only when `individual_types` was requested"}
+          "type": {"type": ["string", "null"], "description": "Only when `individual_types` was requested"}
         }
       },
       "NormalizedNode": {
