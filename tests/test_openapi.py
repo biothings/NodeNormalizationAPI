@@ -7,11 +7,13 @@ If one fails after a change to a handler, edit the JSON; if it fails after a cha
 JSON, the document now promises something the code doesn't do.
 """
 
+import ast
 import dataclasses
 import importlib.resources
 import inspect
 import json
 import re
+import textwrap
 from types import SimpleNamespace
 from unittest import mock
 
@@ -22,15 +24,17 @@ from openapi_spec_validator import validate
 from tornado.testing import AsyncHTTPTestCase
 
 import nodenorm
+from nodenorm.babel import BabelReleases
 from nodenorm.handlers import build_handlers
 from nodenorm.handlers.base import NodeNormalizationBaseHandler
 from nodenorm.handlers.conflations import ValidConflationsHandler
-from nodenorm.handlers.health import NodeNormHealthHandler
 from nodenorm.handlers.normalized_nodes import NormalizedNodesHandler, parse_boolean
 from nodenorm.handlers.semantic_types import SemanticTypeHandler
 from nodenorm.handlers.set_identifiers import SetIdentifierHandler, SetIDResponse
+from nodenorm.handlers.status import NodeNormHealthHandler
 
 SPEC = json.loads((importlib.resources.files(nodenorm) / "webapp" / "openapi.json").read_text(encoding="utf-8"))
+RELEASES = BabelReleases("2026jul22", {"2026jul22": "nodenorm", "2025sep1": "nodenorm-old"})
 
 # Only the handlers that answer the API itself: not the static files, index or redirects.
 API_HANDLERS = {
@@ -59,33 +63,106 @@ def test_documented_methods_match_the_handlers():
         assert documented == implemented, path
 
 
+def resolve_reference(value: dict) -> dict:
+    """Resolve local JSON pointers, including shared query parameters and headers."""
+    while "$ref" in value:
+        reference = value["$ref"]
+        assert reference.startswith("#/"), reference
+        value = SPEC
+        for part in reference[2:].split("/"):
+            value = value[part.replace("~1", "/").replace("~0", "~")]
+    return value
+
+
+def method_calls(handler, method):
+    """Inspect a method and its handler helpers without mixing GET and POST fields."""
+    visited = set()
+
+    def visit(name):
+        if name in visited:
+            return
+        visited.add(name)
+        function = getattr(handler, name, None)
+        if function is None or function.__module__ != handler.__module__:
+            return
+        tree = ast.parse(textwrap.dedent(inspect.getsource(function)))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+                continue
+            yield node
+            if isinstance(node.func.value, ast.Name) and node.func.value.id == "self":
+                yield from visit(node.func.attr)
+
+    return visit(method)
+
+
+def literal_argument(call):
+    if call.args and isinstance(call.args[0], ast.Constant) and isinstance(call.args[0].value, str):
+        return call.args[0].value
+    return None
+
+
+def query_parameters(path_item, method):
+    parameters = path_item.get("parameters", []) + path_item[method].get("parameters", [])
+    return {p["name"] for parameter in parameters if (p := resolve_reference(parameter))["in"] == "query"}
+
+
 def test_documented_query_parameters_match_the_handlers():
-    # The whole class, not just get(), so a parameter read in a helper method still counts.
+    readers = {"get_argument", "get_arguments", "get_query_argument", "get_query_arguments"}
     for path, handler in API_HANDLERS.items():
-        documented = {p["name"] for p in SPEC["paths"][path]["get"].get("parameters", []) if p["in"] == "query"}
-        implemented = set(re.findall(r'get_arguments?\("(\w+)"', inspect.getsource(handler)))
-        assert documented == implemented, path
+        for method in HTTP_METHODS & vars(handler).keys():
+            documented = query_parameters(SPEC["paths"][path], method)
+            implemented = {
+                name
+                for call in method_calls(handler, method)
+                if call.func.attr in readers and (name := literal_argument(call)) is not None
+            }
+            assert documented == implemented, (path, method)
+
+
+def test_query_parameter_check_resolves_shared_parameters_for_post():
+    # POST /get_setid keeps its release selector in the query, outside the array body.
+    assert query_parameters(SPEC["paths"]["/get_setid"], "post") == {"babel_version"}
+    assert query_parameters(SPEC["paths"]["/get_semantic_types"], "get") == {"babel_version"}
+
+
+def test_query_parameter_check_follows_helpers_and_keeps_methods_separate():
+    class Handler:
+        def get(self):
+            self.read_release()
+
+        def read_release(self):
+            return self.get_query_argument("babel_version")
+
+        def post(self):
+            return self.get_query_arguments("batch")
+
+    assert [
+        literal_argument(call) for call in method_calls(Handler, "get") if call.func.attr == "get_query_argument"
+    ] == ["babel_version"]
+    assert [literal_argument(call) for call in method_calls(Handler, "post")] == ["batch"]
 
 
 def resolve(schema: dict) -> dict:
     """Follow a local $ref, and an array to its items, down to the object schema of one body item."""
-    if "$ref" in schema:
-        return resolve(SPEC["components"]["schemas"][schema["$ref"].rsplit("/", 1)[-1]])
+    schema = resolve_reference(schema)
     if schema.get("type") == "array":
         return resolve(schema["items"])
     return schema
 
 
 def test_documented_request_bodies_match_the_handlers():
-    # Body fields are read with .get("field", default), whether the body is one object
-    # (get_normalized_nodes) or a list of them (get_setid). Like the query-parameter check, this
-    # scans the whole class, so a field read in a helper method still counts.
+    # Body fields are read with .get("field", default), in post() or a helper it calls.
     posting = {path: handler for path, handler in API_HANDLERS.items() if "post" in vars(handler)}
     assert posting, "no handler defines post()"
     for path, handler in posting.items():
         body_schema = SPEC["paths"][path]["post"]["requestBody"]["content"]["application/json"]["schema"]
         documented = set(resolve(body_schema)["properties"])
-        implemented = set(re.findall(r'\.get\("(\w+)"', inspect.getsource(handler)))
+        implemented = {
+            name
+            for call in method_calls(handler, "post")
+            if call.func.attr == "get" and (name := literal_argument(call)) is not None
+        }
         assert documented == implemented, path
 
 
@@ -146,7 +223,7 @@ class TestSetIDErrors(AsyncHTTPTestCase):
 
     def get_app(self) -> tornado.web.Application:
         app = tornado.web.Application([(r"/get_setid", SetIdentifierHandler)])
-        app.biothings = SimpleNamespace()
+        app.biothings = SimpleNamespace(elasticsearch=SimpleNamespace(babel=RELEASES))
         return app
 
     def test_get_reports_an_unknown_conflation(self):
@@ -186,10 +263,96 @@ class TestSetIDErrors(AsyncHTTPTestCase):
 
 
 class FakeElasticsearch:
-    """Just enough of AsyncElasticsearch for the semantic-types aggregation."""
+    """Enough of AsyncElasticsearch to exercise the documented response shapes offline."""
+
+    def __init__(self):
+        self.calls = []
+        self.indices = SimpleNamespace(get_mapping=self.get_mapping)
 
     async def search(self, **kwargs):
+        self.calls.append(kwargs)
         return SimpleNamespace(body={"aggregations": {"unique_types": {"buckets": [{"key": "biolink:Disease"}]}}})
+
+    async def msearch(self, **kwargs):
+        self.calls.append(kwargs)
+        responses = []
+        for query in kwargs["searches"][1::2]:
+            curie = query["query"]["bool"]["filter"][0]["terms"]["identifiers.i"][0]
+            source = {
+                "identifiers": [{"i": curie, "l": "Example", "d": ["Example description"]}],
+                "type": "biolink:Disease",
+                "preferred_name": "Example",
+                "taxa": ["NCBITaxon:9606"],
+                "ic": 1.0,
+            }
+            responses.append({"hits": {"total": {"value": 1}, "hits": [{"_id": curie, "_source": source}]}})
+        return SimpleNamespace(body={"responses": responses})
+
+    async def get_mapping(self, **kwargs):
+        return {
+            index: {"mappings": {"_meta": {"src": {"nodenorm": {"version": RELEASES.default_version}}}}}
+            for index in kwargs["index"]
+        }
+
+
+class TestMultiBabelResponses(AsyncHTTPTestCase):
+    def get_app(self):
+        self.client = FakeElasticsearch()
+        app = tornado.web.Application(list(build_handlers().values()))
+        app.biothings = SimpleNamespace(
+            config=SimpleNamespace(deployment_environment="CI"),
+            elasticsearch=SimpleNamespace(
+                async_client=self.client,
+                indices=["nodenorm"],
+                babel=RELEASES,
+                babel_checked_at="2026-11-02T12:00:00+00:00",
+                babel_refresh_error=None,
+            ),
+        )
+        return app
+
+    def validate_response(self, response, path, method):
+        assert response.code == 200, response.body
+        documented = SPEC["paths"][path][method]["responses"]["200"]
+        if path != "/status":
+            assert "X-Babel-Version" in documented.get("headers", {})
+        schema = documented["content"]["application/json"]["schema"]
+        jsonschema.validate(json.loads(response.body), {**schema, "components": SPEC["components"]})
+        for name, header in documented.get("headers", {}).items():
+            jsonschema.validate(response.headers[name], resolve_reference(header)["schema"])
+
+    def test_selected_release_responses_match_the_document(self):
+        for version in RELEASES.available_versions:
+            for path, method, body in [
+                ("/get_normalized_nodes", "get", None),
+                ("/get_normalized_nodes", "post", {"curies": ["MONDO:0004976"], "babel_version": version}),
+                ("/get_setid", "get", None),
+                ("/get_setid", "post", [{"curies": ["MONDO:0004976"]}]),
+                ("/get_semantic_types", "get", None),
+            ]:
+                if path == "/get_normalized_nodes" and method == "post":
+                    url = path
+                    body.update(description=True, individual_types=True)
+                else:
+                    url = f"{path}?babel_version={version}"
+                    if method == "get" and path != "/get_semantic_types":
+                        url += "&curie=MONDO:0004976"
+                options = {"method": method.upper()}
+                if body is not None:
+                    options["body"] = json.dumps(body)
+                    options["headers"] = {"Content-Type": "application/json"}
+                response = self.fetch(url, **options)
+                self.validate_response(response, path, method)
+                assert response.headers["X-Babel-Version"] == version
+                assert self.client.calls[-1]["index"] == RELEASES.resolve(version).search_indices
+
+    def test_status_matches_current_metadata_schema(self):
+        response = self.fetch("/status")
+        self.validate_response(response, "/status", "get")
+        body = json.loads(response.body)
+        assert body["deployment_environment"] == "CI"
+        assert body["babel_version"] == body["babel"]["default_version"]
+        assert body["babel_version_url"] == body["babel"]["available_versions"][body["babel_version"]]
 
 
 class TestSemanticTypes(AsyncHTTPTestCase):
@@ -198,7 +361,7 @@ class TestSemanticTypes(AsyncHTTPTestCase):
     def get_app(self) -> tornado.web.Application:
         app = tornado.web.Application([(r"/get_semantic_types", SemanticTypeHandler)])
         app.biothings = SimpleNamespace(
-            elasticsearch=SimpleNamespace(indices="nodenorm", async_client=FakeElasticsearch())
+            elasticsearch=SimpleNamespace(indices="nodenorm", async_client=FakeElasticsearch(), babel=RELEASES)
         )
         return app
 
@@ -223,24 +386,27 @@ class UnreachableElasticsearch:
 
 
 class TestStatusWithoutElasticsearch(AsyncHTTPTestCase):
-    """Regression: the index mapping was read outside the try, so a down cluster gave a 500, not status=error."""
+    """An unreachable cluster preserves main's documented HTTP 503 health response."""
 
     def get_app(self) -> tornado.web.Application:
         app = tornado.web.Application([(r"/status", NodeNormHealthHandler)])
         app.biothings = SimpleNamespace(
-            elasticsearch=SimpleNamespace(indices="nodenorm", async_client=UnreachableElasticsearch())
+            elasticsearch=SimpleNamespace(
+                indices="nodenorm",
+                async_client=UnreachableElasticsearch(),
+                babel=RELEASES,
+                babel_checked_at="2026-11-02T12:00:00+00:00",
+                babel_refresh_error=None,
+            )
         )
         return app
 
-    def test_status_is_error(self):
+    def test_status_is_unavailable(self):
         response = self.fetch("/status")
 
-        assert response.code == 200
-        body = json.loads(response.body)
-        jsonschema.validate(
-            body, SPEC["paths"]["/status"]["get"]["responses"]["200"]["content"]["application/json"]["schema"]
-        )
-        assert body["status"] == "error"
+        assert response.code == 503
+        assert "503" in SPEC["paths"]["/status"]["get"]["responses"]
+        assert response.headers["Cache-Control"] == "no-store"
 
 
 @pytest.mark.parametrize("value", [True, "true", "TRUE", "1", "yes", "on", "t", "Y"])

@@ -25,6 +25,6 @@ class NodeNormalizationAPI(TornadoBiothingsAPI):
         handlers = build_handlers()
         namespace.populate_handlers(handlers)
         settings = namespace.config.webserver["SETTINGS"]
-        app = cls(handlers.values(), settings)
+        app = cls(handlers.values(), **settings)
         app.biothings = namespace
         return app

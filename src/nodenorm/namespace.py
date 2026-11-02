@@ -1,11 +1,15 @@
+import asyncio
 import importlib.resources
 import importlib.util
 import json
 import logging
+import os
 import pathlib
 import re
 import sys
 import types
+from contextlib import suppress
+from datetime import datetime, timezone
 
 import tornado.options
 
@@ -13,9 +17,13 @@ from biothings.web import connections
 from biothings.web.services.metadata import BiothingsESMetadata
 
 import nodenorm
+from nodenorm.babel import BabelReleases
 
 
 logger = logging.getLogger(__name__)
+BABEL_REFRESH_INTERVAL = 600
+BABEL_REFRESH_RETRY_INTERVAL = 30
+BABEL_REFRESH_TIMEOUT = 10
 
 
 class NodeNormalizationAPINamespace:
@@ -67,6 +75,13 @@ class NodeNormalizationAPINamespace:
         """
         elasticsearch_namespace = types.SimpleNamespace()
         elasticsearch_configuration = self.config.elasticsearch
+        babel_configuration = getattr(self.config, "babel", {})
+        if not isinstance(babel_configuration, dict):
+            raise ValueError("babel configuration must be an object")
+        if babel_configuration:
+            raise ValueError(
+                "Babel releases are discovered from Elasticsearch; configure the default with ES_INDEX / ES_ALIAS"
+            )
 
         elasticsearch_namespace.client = connections.es.get_client(
             elasticsearch_configuration["ES_HOST"], **elasticsearch_configuration["ES_ARGS"]
@@ -74,8 +89,70 @@ class NodeNormalizationAPINamespace:
         elasticsearch_namespace.async_client = connections.es.get_async_client(
             elasticsearch_configuration["ES_HOST"], **elasticsearch_configuration["ES_ARGS"]
         )
-        elasticsearch_namespace.indices = self._validate_elasticsearch_index(elasticsearch_namespace)
+        configured_indices = self._validate_elasticsearch_index(elasticsearch_namespace)
+        default_mappings = elasticsearch_namespace.client.indices.get_mapping(
+            index=configured_indices, filter_path="*.mappings._meta"
+        )
+        mappings = elasticsearch_namespace.client.indices.get_mapping(filter_path="*.mappings._meta")
+        releases = BabelReleases.from_default_mappings(default_mappings, mappings)
+        elasticsearch_namespace.indices = releases.resolve().search_indices
+        elasticsearch_namespace.babel = releases
+        elasticsearch_namespace.babel_checked_at = datetime.now(timezone.utc).isoformat()
+        elasticsearch_namespace.babel_refresh_error = None
         return elasticsearch_namespace
+
+    async def _discover_babel_releases(self):
+        client = self.elasticsearch.async_client
+        configuration = self.config.elasticsearch
+        index = configuration["ES_INDEX"]
+        alias = configuration["ES_ALIAS"]
+        if index and await client.indices.exists(index=index):
+            target = index
+        elif await client.indices.exists_alias(name=alias):
+            target = alias
+        else:
+            raise RuntimeError("Unable to validate nodenorm elasticsearch index / alias")
+        default_mappings = await client.indices.get_mapping(index=[target], filter_path="*.mappings._meta")
+        mappings = await client.indices.get_mapping(filter_path="*.mappings._meta")
+        return BabelReleases.from_default_mappings(default_mappings, mappings)
+
+    async def refresh_babel_releases(self):
+        """Publish a complete discovery snapshot, retaining the previous one on failure."""
+        try:
+            releases = await asyncio.wait_for(self._discover_babel_releases(), timeout=BABEL_REFRESH_TIMEOUT)
+        except Exception:
+            logger.exception("Unable to refresh Babel releases; retaining the previous snapshot")
+            self.elasticsearch.babel_refresh_error = {"code": "discovery_failed"}
+            return False
+
+        # There is no await between these writes: handlers see one complete
+        # snapshot, and requests that already selected a release keep that object.
+        self.elasticsearch.babel = releases
+        self.elasticsearch.indices = releases.resolve().search_indices
+        self.elasticsearch.babel_checked_at = datetime.now(timezone.utc).isoformat()
+        self.elasticsearch.babel_refresh_error = None
+        return True
+
+    async def _run_babel_refresh(self):
+        delay = BABEL_REFRESH_INTERVAL
+        while True:
+            await asyncio.sleep(delay)
+            refreshed = await self.refresh_babel_releases()
+            delay = BABEL_REFRESH_INTERVAL if refreshed else BABEL_REFRESH_RETRY_INTERVAL
+
+    def start_babel_refresh(self):
+        """Start one background discovery task on the server's running event loop."""
+        task = getattr(self, "_babel_refresh_task", None)
+        if task is None or task.done():
+            self._babel_refresh_task = asyncio.create_task(self._run_babel_refresh())
+
+    async def stop_babel_refresh(self):
+        task = getattr(self, "_babel_refresh_task", None)
+        if task is not None:
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
+            self._babel_refresh_task = None
 
     def _validate_elasticsearch_index(self, elasticsearch_namespace: types.SimpleNamespace) -> dict:
         """Validates the elasticsearch index / alias.
@@ -196,9 +273,8 @@ class NodeNormalizationAPINamespace:
         Loads the default configuration file found in ~/src/nodenorm/config/config.default.json
         to create a base structure. It then checks if an optional configuration file was provided
         via the command line options. We override the default configuration file with this option
-        based file. After that, we setup our static path structure for loading the webapp containing
-        our swaggerui frontend. We check any other command line options and then return our
-        configuration data structure
+        based file. We check any other command line options and then return our configuration
+        data structure. Static frontend routes are defined explicitly by build_handlers.
         """
         configuration = {}
 
@@ -217,11 +293,10 @@ class NodeNormalizationAPINamespace:
                 with open(optional_configuration, "r", encoding="utf-8") as handle:
                     configuration.update(json.load(handle))
 
-        # Force the static path to the webapp directory
-        package_directory = importlib.resources.files(nodenorm)
-        webapp_directory = package_directory.joinpath("webapp")
-        configuration["webserver"]["SETTINGS"]["static_path"] = str(webapp_directory)
-        configuration["webserver"]["SETTINGS"]["static_url_prefix"] = "/"
+        deployment_environment = os.getenv("NODENORM_DEPLOYMENT_ENV") or configuration["deployment_environment"]
+        if not isinstance(deployment_environment, str):
+            raise ValueError("deployment_environment must be a string")
+        configuration["deployment_environment"] = deployment_environment.strip() or "unknown"
 
         configuration_namespace = types.SimpleNamespace(**configuration)
 
