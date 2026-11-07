@@ -28,10 +28,16 @@ class SemanticTypeHandler(NodeNormalizationBaseHandler):
             )
             raise network_error from gen_exc
 
+        # The aggregation's bucket keys are the indexed keyword values of `type`, which the
+        # index mapping lowercases ("biolink:smallmolecule"), unlike the `_source` that
+        # /get_normalized_nodes reads. Don't add the keys directly: look each one up in the
+        # Biolink model (bmt matches case-insensitively) and report its `class_uri`
+        # ("biolink:SmallMolecule"). A key the model doesn't know is reported as is.
         semantic_types = set()
         for bucket in type_aggregation_result.body["aggregations"]["unique_types"]["buckets"]:
             biolink_type = bucket["key"]
-            semantic_types.add(biolink_type)
+            element = toolkit.get_element(biolink_type)
+            semantic_types.add(element["class_uri"] if element else biolink_type)
             for ancestor in toolkit.get_ancestors(biolink_type):
                 semantic_types.add(toolkit.get_element(ancestor)["class_uri"])
 

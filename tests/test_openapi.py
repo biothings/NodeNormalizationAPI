@@ -271,7 +271,8 @@ class FakeElasticsearch:
 
     async def search(self, **kwargs):
         self.calls.append(kwargs)
-        return SimpleNamespace(body={"aggregations": {"unique_types": {"buckets": [{"key": "biolink:Disease"}]}}})
+        # Real indices lowercase the `type` keyword, so aggregation keys come back lowercased.
+        return SimpleNamespace(body={"aggregations": {"unique_types": {"buckets": [{"key": "biolink:disease"}]}}})
 
     async def msearch(self, **kwargs):
         self.calls.append(kwargs)
@@ -356,7 +357,8 @@ class TestMultiBabelResponses(AsyncHTTPTestCase):
 
 
 class TestSemanticTypes(AsyncHTTPTestCase):
-    """Regression: the handler lower-cased every class ("biolink:namedthing")."""
+    """Regression: the handler lower-cased every class ("biolink:namedthing"), and then
+    reported the lowercased aggregation key next to its capitalised class_uri."""
 
     def get_app(self) -> tornado.web.Application:
         app = tornado.web.Application([(r"/get_semantic_types", SemanticTypeHandler)])
@@ -374,6 +376,7 @@ class TestSemanticTypes(AsyncHTTPTestCase):
         types = body["semantic_types"]["types"]
         assert "biolink:Disease" in types and "biolink:NamedThing" in types
         assert all(re.fullmatch(r"biolink:[A-Z][A-Za-z]*", t) for t in types), types
+        assert len({t.lower() for t in types}) == len(types), types
 
 
 class UnreachableElasticsearch:
